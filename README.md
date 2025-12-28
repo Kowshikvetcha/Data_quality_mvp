@@ -32,3 +32,11 @@ Clone the repository:
 ```bash
 git clone https://github.com/Kowshikvetcha/Data_quality_mvp.git
 cd Data_quality_mvp
+
+```
+create a virtual environment
+pip install -r requirements.txt
+streamlit run app.py
+streamlit run app1.py
+
+
