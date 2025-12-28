@@ -1,0 +1,11 @@
+customer_id,name,email,age,country,signup_date,salary
+1,Alice,alice@example.com,28,USA,2023-01-10,70000
+2,Bob,bob@example.com,,USA,2023-01-12,65000
+3,Charlie,charlie@example.com,35,UK,2023-02-01,
+4,David,david@example.com,-5,USA,2023-02-05,72000
+5,Eve,eve@example.com,29,India,2023/02/10,68000
+6,Frank,frank@example.com,,USA,2023-01-12,65000
+2,Bob,bob@example.com,,USA,2023-01-12,65000
+7,Grace,grace@,31,USA,2023-03-01,71000
+8,Heidi,heidi@example.com,200,Germany,2023-03-05,69000
+9,Ivan,ivan@example.com,40,Russia,,80000

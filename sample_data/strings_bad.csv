@@ -1,0 +1,101 @@
+status,category
+,C 
+ OPEN,b
+open,A
+closed ,
+,b
+Open,b
+,A
+open,b
+,
+Open,b
+open,
+,A
+closed ,C 
+,b
+open,C 
+,
+open,b
+closed , c
+,C 
+ OPEN,b
+Open,C 
+ OPEN,b
+,A
+closed ,C 
+ OPEN, c
+open, c
+,
+,b
+ OPEN,C 
+ OPEN,
+closed ,C 
+Open,b
+ OPEN, c
+ OPEN,A
+, c
+open,
+,A
+,
+,b
+Open,A
+open,
+closed ,b
+closed , c
+ OPEN,b
+ OPEN,C 
+closed ,b
+ OPEN,b
+Open,C 
+,
+ OPEN,
+,b
+ OPEN,C 
+open,C 
+Open, c
+open,
+open,A
+,
+Open,
+Open, c
+Open,A
+Open, c
+Open,A
+,b
+ OPEN,A
+open, c
+Open,
+ OPEN,A
+ OPEN,A
+open,C 
+,
+closed ,b
+closed , c
+ OPEN,b
+,
+,A
+open,A
+closed ,
+ OPEN,A
+,A
+closed ,A
+ OPEN, c
+ OPEN, c
+Open,C 
+,b
+Open,
+open,
+Open,
+Open,C 
+closed , c
+,C 
+ OPEN,
+,b
+Open,A
+, c
+, c
+,C 
+Open, c
+open,
+Open,
+closed ,C 

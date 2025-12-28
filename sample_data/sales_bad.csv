@@ -1,0 +1,211 @@
+order_id,order_date,customer_name,amount,region
+103,invalid_date, bob,-5,APAC 
+93,2024-01-01,CHARLIE ,20,us
+15,2024-01-01, bob,20,us
+107,01-02-2024,Alice,-5,US
+72,01-02-2024,,20,us
+21,03/15/2024,,-5,
+103,invalid_date,,-5, EU
+122,01-02-2024, bob,1000,US
+75,2024-01-01,Alice,10,us
+88,invalid_date,,-5,US
+117,invalid_date,CHARLIE ,30,US
+100,2024-01-01,,N/A, EU
+104,01-02-2024,,,
+131,2024-01-01, bob,10,US
+,invalid_date,CHARLIE ,10,us
+53,,,10,APAC 
+2,,Alice,1000,US
+88,03/15/2024,Alice,-5,US
+38,2024-01-01,,1000, EU
+130,2024-01-01,CHARLIE ,-5,
+21,03/15/2024,CHARLIE ,1000,APAC 
+58,03/15/2024,,1000,us
+22,03/15/2024,,N/A,APAC 
+89,invalid_date,CHARLIE ,30,us
+49,2024-01-01,Alice,1000,
+59,invalid_date,Alice,N/A,us
+15,03/15/2024, bob,20, EU
+51,2024-01-01,CHARLIE ,30, EU
+108,invalid_date,,1000, EU
+55,invalid_date,,, EU
+64,03/15/2024,,10,APAC 
+131,2024-01-01,,20,
+51,03/15/2024, bob,20,us
+135,2024-01-01,,N/A,us
+21,,CHARLIE ,20, EU
+73,01-02-2024, bob,30, EU
+18,01-02-2024,CHARLIE ,1000,US
+132,01-02-2024,Alice,1000,
+89,03/15/2024, bob,,APAC 
+60,,,10,us
+14,2024-01-01, bob,N/A,US
+9,invalid_date, bob,10,US
+90,2024-01-01, bob,20,us
+53,invalid_date, bob,,APAC 
+130,2024-01-01,CHARLIE ,10,US
+84,,Alice,30,US
+92,invalid_date,,1000,
+111,03/15/2024, bob,20,APAC 
+8,2024-01-01,,,US
+35,2024-01-01, bob,10,APAC 
+81,invalid_date,,N/A,us
+50,03/15/2024,CHARLIE ,30, EU
+104,03/15/2024,,30,US
+132,,,10,
+2,03/15/2024,Alice,1000,us
+134,03/15/2024,,10,APAC 
+54,03/15/2024,,20,us
+106,01-02-2024,Alice,10,US
+4,,,30,APAC 
+54,2024-01-01, bob,, EU
+146,invalid_date,,10,us
+44,2024-01-01,Alice,1000,US
+14,,CHARLIE ,,
+95,invalid_date,Alice,N/A,APAC 
+48,,CHARLIE ,-5,us
+15,03/15/2024,,10,us
+40,invalid_date, bob,1000, EU
+82,03/15/2024,Alice,, EU
+111,2024-01-01,,1000,
+53,2024-01-01,,N/A,
+24,invalid_date,Alice,30,US
+124,invalid_date,,1000,US
+41,,Alice,,
+15,,CHARLIE ,1000,
+45,03/15/2024,Alice,1000,APAC 
+65,invalid_date,Alice,1000, EU
+89,2024-01-01,Alice,20,US
+71,,,20, EU
+9,,Alice,30, EU
+88,2024-01-01,,10,
+129,,CHARLIE ,1000,APAC 
+136,03/15/2024,CHARLIE ,N/A,us
+63,invalid_date,Alice,10,APAC 
+139,2024-01-01,,N/A,APAC 
+81,invalid_date,,10, EU
+136,,,30,APAC 
+33,,Alice,1000,US
+123,2024-01-01,CHARLIE ,1000, EU
+5,03/15/2024,,-5,US
+41,01-02-2024,Alice,N/A,us
+28,2024-01-01,,10, EU
+135,01-02-2024,,10,us
+72,01-02-2024,CHARLIE ,20, EU
+12,03/15/2024, bob,-5,
+33,01-02-2024,,,APAC 
+48,01-02-2024,,,
+62,03/15/2024,CHARLIE ,20,us
+37,01-02-2024,,20,APAC 
+99,01-02-2024,Alice,20, EU
+104,01-02-2024,,N/A,APAC 
+35,2024-01-01,CHARLIE ,N/A,US
+101,2024-01-01,,30,APAC 
+131,2024-01-01,,30,US
+1,03/15/2024,,20,APAC 
+5,,Alice,-5,US
+142,01-02-2024,,10,us
+103,01-02-2024,,N/A,
+27,03/15/2024, bob,-5, EU
+137,01-02-2024, bob,1000,APAC 
+15,2024-01-01, bob,N/A,
+90,,,N/A, EU
+42,invalid_date,CHARLIE ,30, EU
+124,01-02-2024,,10,US
+63,2024-01-01,CHARLIE ,10,us
+96,invalid_date,CHARLIE ,,us
+52,, bob,,
+96,invalid_date,,,us
+132,2024-01-01,Alice,,APAC 
+143,invalid_date, bob,1000,us
+29,03/15/2024, bob,1000,
+36,invalid_date,,N/A,us
+13,01-02-2024,Alice,20,APAC 
+71,01-02-2024,,30,US
+86,03/15/2024,,30,
+28,2024-01-01, bob,,US
+66,01-02-2024,Alice,N/A,US
+45,, bob,-5,US
+62,01-02-2024,CHARLIE ,20, EU
+134,01-02-2024, bob,N/A, EU
+28,2024-01-01, bob,20,US
+28,invalid_date,,20,
+108,01-02-2024,,20,APAC 
+44,03/15/2024,,N/A,APAC 
+84,invalid_date,CHARLIE ,,us
+30,,,30,
+75,2024-01-01,Alice,30, EU
+128,,,,US
+92,invalid_date,Alice,20,us
+129,invalid_date,Alice,-5,APAC 
+121,invalid_date,,10, EU
+27,,,N/A, EU
+121,invalid_date,,10,US
+116,,,,APAC 
+3,invalid_date,CHARLIE ,-5,
+103,03/15/2024,,N/A, EU
+137,invalid_date,,,US
+62,,CHARLIE ,20,
+51,01-02-2024, bob,30,APAC 
+59,invalid_date, bob,10, EU
+118,01-02-2024,CHARLIE ,1000,
+96,03/15/2024,CHARLIE ,1000,
+113,2024-01-01,,-5,
+62,03/15/2024,,20, EU
+52,invalid_date, bob,10, EU
+12,01-02-2024,,20,us
+39,01-02-2024, bob,10,APAC 
+130,,,-5,US
+131,01-02-2024,,-5,
+113,,,1000,us
+101,2024-01-01,Alice,20,US
+113,invalid_date,Alice,N/A,us
+81,,CHARLIE ,1000, EU
+113,2024-01-01,,20,
+2,01-02-2024,,1000,US
+130,01-02-2024,Alice,N/A,US
+54,2024-01-01,,30,US
+87,01-02-2024,Alice,30,US
+129,2024-01-01,Alice,30,US
+147,,Alice,30,us
+126,,,,
+130,2024-01-01, bob,10, EU
+53,,,, EU
+68,,,, EU
+123,,,, EU
+145,03/15/2024,,30,us
+38,invalid_date,,N/A,APAC 
+24,01-02-2024,,-5,
+69,03/15/2024,CHARLIE ,-5,US
+116,,,10,APAC 
+98,2024-01-01,,30, EU
+139,,,30,APAC 
+144,invalid_date,CHARLIE ,30,
+97,,CHARLIE ,1000,US
+124,2024-01-01,,20,US
+70,invalid_date,Alice,1000,
+93,, bob,20,
+3,invalid_date,Alice,30, EU
+148,01-02-2024,Alice,30,US
+147,01-02-2024,Alice,1000,APAC 
+90,,,1000,us
+147,invalid_date,CHARLIE ,20,us
+148,2024-01-01,Alice,-5,
+96,,CHARLIE ,20, EU
+52,01-02-2024,,1000,us
+128,01-02-2024, bob,N/A,US
+39,,,1000,
+82,invalid_date,,N/A,APAC 
+104,01-02-2024,,10,
+129,invalid_date, bob,1000,APAC 
+11,01-02-2024,,10,
+103,invalid_date, bob,-5,APAC 
+93,2024-01-01,CHARLIE ,20,us
+15,2024-01-01, bob,20,us
+107,01-02-2024,Alice,-5,US
+72,01-02-2024,,20,us
+21,03/15/2024,,-5,
+103,invalid_date,,-5, EU
+122,01-02-2024, bob,1000,US
+75,2024-01-01,Alice,10,us
+88,invalid_date,,-5,US
