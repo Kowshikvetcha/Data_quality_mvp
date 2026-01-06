@@ -19,7 +19,6 @@ from core.confirm import describe_tool_call
 # Page config
 # ------------------------
 st.set_page_config(page_title="AI Data Cleaning MVP", layout="wide")
-st.title("🧹 AI-Assisted Data Cleaning")
 
 # ------------------------
 # Session state init
@@ -31,44 +30,28 @@ for key in [
     "report",
     "chat_history",
     "pending_tool_call",
+    "df_history",
+    "has_cleaning_applied",
+    "executed_actions"
 ]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 if st.session_state.chat_history is None:
     st.session_state.chat_history = []
-# Initialize flag to track if cleaning has been applied
-#-----Modified -------------#
-if "has_cleaning_applied" not in st.session_state:
+if st.session_state.df_history is None:
+    st.session_state.df_history = []
+if st.session_state.has_cleaning_applied is None:
     st.session_state.has_cleaning_applied = False
-#-----Modified -------------#
+if st.session_state.executed_actions is None:
+    st.session_state.executed_actions = []
 
-
-# ------------------------
-# File upload
-# ------------------------
-uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-
-if uploaded_file and st.session_state.original_df is None:
-    df = pd.read_csv(uploaded_file)
-
-    st.session_state.original_df = df
-    st.session_state.cleaned_df = df.copy()
-    st.session_state.column_types = infer_all_column_types(df)
-
-    st.success("Dataset uploaded successfully")
-
-# Stop if no data
-if st.session_state.original_df is None:
-    st.info("Upload a dataset to start.")
-    st.stop()
 
 # ------------------------
 # Helper: Run quality checks
 # ------------------------
 def run_quality_checks(df):
     column_types = infer_all_column_types(df)
-
     report = {
         "dataset_level": dataset_level_checks(df),
         "completeness": column_completeness_checks(df),
@@ -78,126 +61,210 @@ def run_quality_checks(df):
         "numeric_validity": numeric_validity_checks(df),
         "outliers": outlier_checks(df),
     }
-
     column_summary = build_column_summary(report)
     health = compute_dataset_health(report, column_summary)
-
     return column_summary, health
 
 # ------------------------
-# ORIGINAL DATA SECTION
+# SIDEBAR: File Upload & Status
 # ------------------------
-st.header("📊 Original Dataset")
+with st.sidebar:
+    st.title("🧹 AI Cleaner")
+    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    
+    if uploaded_file and st.session_state.original_df is None:
+        df = pd.read_csv(uploaded_file)
+        st.session_state.original_df = df
+        st.session_state.cleaned_df = df.copy()
+        st.session_state.column_types = infer_all_column_types(df)
+        st.success("Loaded!")
 
-st.subheader("Preview (first 20 rows)")
-st.dataframe(st.session_state.original_df.head(20), use_container_width=True)
+    if st.session_state.original_df is not None:
+        st.divider()
+        st.subheader("Dataset Info")
+        st.write(f"Rows: {st.session_state.original_df.shape[0]}")
+        st.write(f"Columns: {st.session_state.original_df.shape[1]}")
+        
+    st.divider()
+    if st.button("Reset App"):
+        st.session_state.clear()
+        st.rerun()
 
-orig_summary, orig_health = run_quality_checks(st.session_state.original_df)
+# Stop if no data
+if st.session_state.original_df is None:
+    st.info("👈 Upload a dataset in the sidebar to start.")
+    st.stop()
 
-st.subheader("Data Quality Issues (Original)")
-st.metric("Health Score", orig_health["score"], orig_health["status"])
-st.dataframe(orig_summary, use_container_width=True)
-
-# ------------------------
-# CHAT SECTION
-# ------------------------
-st.divider()
-st.header("💬 Clean Your Data Using Chat")
-
-# Show chat history
-for msg in st.session_state.chat_history:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-user_input = st.chat_input("Describe how you want to clean the data…")
-
-if user_input:
-    st.session_state.chat_history.append(
-        {"role": "user", "content": user_input}
-    )
-
-    tool_call = route_user_request(
-        user_input,
-        st.session_state.column_types
-    )
-
-    if tool_call:
-        description = describe_tool_call(tool_call)
-        st.session_state.pending_tool_call = tool_call
-
-        st.session_state.chat_history.append(
-            {
-                "role": "assistant",
-                "content": f"**Proposed action:**\n\n{description}",
-            }
-        )
-    else:
-        st.session_state.chat_history.append(
-            {
-                "role": "assistant",
-                "content": "I couldn’t map that request to a valid cleaning action.",
-            }
-        )
-
-    st.rerun()
 
 # ------------------------
-# APPLY / CANCEL
+# MAIN TABS
 # ------------------------
-if st.session_state.pending_tool_call:
-    st.warning("⚠️ Confirm the proposed cleaning action")
+tab_inspector, tab_chat, tab_history = st.tabs([
+    "🕵️ Data Inspector", 
+    "💬 Chat & Transform", 
+    "📜 History & Code"
+])
 
+# ========================
+# TAB 1: INSPECTOR
+# ========================
+with tab_inspector:
+    st.header("🔎 Data Inspector")
+    
     col1, col2 = st.columns(2)
-
+    
     with col1:
-        if st.button("✅ Apply"):
-            st.session_state.cleaned_df = execute_tool(
-                st.session_state.cleaned_df,
-                st.session_state.pending_tool_call,
-                st.session_state.column_types,
-            )
-
-            st.session_state.column_types = infer_all_column_types(
-                st.session_state.cleaned_df
-            )
-
-            #-----------Modified -------------#
-            st.session_state.has_cleaning_applied = True   # ✅ THIS IS KEY
-            #-----------Modified -------------#
-
-            st.session_state.chat_history.append(
-                {
-                    "role": "assistant",
-                    "content": "✅ Cleaning applied successfully.",
-                }
-            )
-
-            st.session_state.pending_tool_call = None
-            st.rerun()
-
+        st.subheader("Original Data")
+        st.dataframe(st.session_state.original_df.head(50), use_container_width=True)
+        orig_summary, orig_health = run_quality_checks(st.session_state.original_df)
+        st.metric("Health Score (Original)", orig_health["score"], orig_health["status"])
+        st.caption("Issues Found:")
+        st.dataframe(orig_summary, use_container_width=True)
+    
     with col2:
-        if st.button("❌ Cancel"):
-            st.session_state.chat_history.append(
-                {
-                    "role": "assistant",
-                    "content": "🚫 Cleaning action cancelled.",
-                }
-            )
+        st.subheader("Current Cleaned Data")
+        st.dataframe(st.session_state.cleaned_df.head(50), use_container_width=True)
+        clean_summary, clean_health = run_quality_checks(st.session_state.cleaned_df)
+        
+        delta = round(clean_health["score"] - orig_health["score"], 2)
+        st.metric("Health Score (Cleaned)", clean_health["score"], delta=delta)
+        st.caption("Issues Found:")
+        st.dataframe(clean_summary, use_container_width=True)
 
-            st.session_state.pending_tool_call = None
-            st.rerun()
+    st.divider()
+    st.subheader("🔍 Column Profiles & Distributions")
+    
+    selected_col = st.selectbox("Select Column to Visualize", st.session_state.cleaned_df.columns)
+    
+    viz_col1, viz_col2 = st.columns(2)
+    with viz_col1:
+        st.write(f"**Stats for '{selected_col}':**")
+        st.write(st.session_state.cleaned_df[selected_col].describe())
+    
+    with viz_col2:
+        st.write(f"**Distribution:**")
+        
+        if pd.api.types.is_numeric_dtype(st.session_state.cleaned_df[selected_col]):
+            # Use a histogram-like bar chart for numeric data
+            # Bin the data into max 20 bins to show distribution
+            chart_data = st.session_state.cleaned_df[selected_col].dropna()
+            # If unique values are few (discrete numeric), count directly
+            if chart_data.nunique() <= 20:
+                counts = chart_data.value_counts().sort_index()
+            else:
+                # Continuous: Bin it
+                # Using pandas cut to bin
+                counts = chart_data.value_counts(bins=20, sort=False)
+                # Convert Interval index to string for plotting
+                counts.index = counts.index.astype(str)
+            
+            st.bar_chart(counts)
+        else:
+            # Categorical
+            st.bar_chart(st.session_state.cleaned_df[selected_col].value_counts().head(20))
 
-# ------------------------
-# CLEANED DATA SECTION
-# ------------------------
-st.divider()
-st.header("✨ Cleaned Dataset")
 
-st.subheader("Preview (first 20 rows)")
-st.dataframe(st.session_state.cleaned_df.head(20), use_container_width=True)
+# ========================
+# TAB 2: CHAT & TRANSFORM
+# ========================
+with tab_chat:
+    st.header("💬 Chat & Transform")
+    
+    # Chat Container
+    chat_container = st.container(height=400)
+    with chat_container:
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-clean_summary, clean_health = run_quality_checks(st.session_state.cleaned_df)
+    user_input = st.chat_input("Describe how you want to clean the data…")
+    
+    if user_input:
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        tool_call = route_user_request(user_input, st.session_state.column_types)
+        
+        if tool_call:
+            description = describe_tool_call(tool_call)
+            st.session_state.pending_tool_call = tool_call
+            st.session_state.chat_history.append({
+                "role": "assistant", 
+                "content": f"**Proposed action:**\n\n{description}"
+            })
+        else:
+            st.session_state.chat_history.append({
+                "role": "assistant", 
+                "content": "I couldn’t map that request to a valid cleaning action."
+            })
+        st.rerun()
 
-st.subheader("Data Quality Issues (After Cleaning)")
-st.metric("Health Score", clean_health["score"], clean_health["status"])
-st.dataframe(clean_summary, use_container_width=True)
+    # CONFIRMATION BLOCK
+    if st.session_state.pending_tool_call:
+        st.divider()
+        st.warning("⚠️ Confirm Action")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ Apply Transformation"):
+                st.session_state.df_history.append(st.session_state.cleaned_df.copy()) # Push to history
+                st.session_state.executed_actions.append(st.session_state.pending_tool_call) # Track action
+                
+                st.session_state.cleaned_df = execute_tool(
+                    st.session_state.cleaned_df,
+                    st.session_state.pending_tool_call,
+                    st.session_state.column_types
+                )
+                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                st.session_state.has_cleaning_applied = True
+                
+                st.session_state.chat_history.append({"role": "assistant", "content": "✅ Applied!"})
+                st.session_state.pending_tool_call = None
+                st.rerun()
+        with c2:
+            if st.button("❌ Cancel"):
+                st.session_state.chat_history.append({"role": "assistant", "content": "🚫 Cancelled."})
+                st.session_state.pending_tool_call = None
+                st.rerun()
+                
+    st.divider()
+    
+    # ACTIONS: UNDO / DOWNLOAD
+    ac1, ac2 = st.columns(2)
+    with ac1:
+        if st.session_state.has_cleaning_applied:
+            csv = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Result", data=csv, file_name="cleaned_data.csv", mime="text/csv")
+            
+    with ac2:
+        if st.session_state.df_history:
+            if st.button("↩️ Undo Last Action"):
+                st.session_state.cleaned_df = st.session_state.df_history.pop()
+                if st.session_state.executed_actions:
+                    st.session_state.executed_actions.pop()
+                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                st.rerun()
+
+
+# ========================
+# TAB 3: HISTORY & CODE
+# ========================
+with tab_history:
+    st.header("📜 Audit Log & Code")
+    
+    st.info("History of actions and reproducible script.")
+
+    if st.session_state.executed_actions:
+        st.write("### 📝 Cleaning Script")
+        
+        script = "import pandas as pd\nimport numpy as np\nfrom core.cleaning import *\n\n"
+        script += "def clean_dataset(df):\n"
+        
+        for action in st.session_state.executed_actions:
+            tool = action["tool_name"]
+            args = action["arguments"]
+            params = ", ".join([f"{k}={repr(v)}" for k, v in args.items()])
+            script += f"    df = {tool}(df, {params})\n"
+            
+        script += "    return df"
+        
+        st.code(script, language="python")
+    else:
+        st.write("No actions performed yet.")

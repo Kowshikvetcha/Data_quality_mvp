@@ -90,21 +90,21 @@ if uploaded_file:
     # ------------------------
     # Exports
     # ------------------------
-    st.subheader("📤 Export Reports")
+    # st.subheader("📤 Export Reports")
 
-    col1, col2, col3 = st.columns(3)
+    # col1, col2, col3 = st.columns(3)
 
-    with col1:
-        if st.button("Export JSON"):
-            path = export_report_json(report)
-            st.success(f"Exported to {path}")
+    # with col1:
+    #     if st.button("Export JSON"):
+    #         path = export_report_json(report)
+    #         st.success(f"Exported to {path}")
 
-    with col2:
-        if st.button("Export Column CSV"):
-            path = export_column_summary_csv(column_summary)
-            st.success(f"Exported to {path}")
+    # with col2:
+    #     if st.button("Export Column CSV"):
+    #         path = export_column_summary_csv(column_summary)
+    #         st.success(f"Exported to {path}")
 
-    with col3:
-        if st.button("Export Summary TXT"):
-            path = export_executive_summary_txt(summary_text)
-            st.success(f"Exported to {path}")
+    # with col3:
+    #     if st.button("Export Summary TXT"):
+    #         path = export_executive_summary_txt(summary_text)
+    #         st.success(f"Exported to {path}")
