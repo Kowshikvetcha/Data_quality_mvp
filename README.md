@@ -48,6 +48,9 @@ streamlit run app.py
 
 streamlit run app1.py
 
+streamlit run app_manual.py -- for manual transformation of data
+
+
 
 
 
