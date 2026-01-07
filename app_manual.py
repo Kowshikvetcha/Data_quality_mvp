@@ -194,6 +194,85 @@ with tab_inspector:
 
 
 # ========================
+# TAB 2: CHAT & TRANSFORM
+# ========================
+with tab_chat:
+    st.header("💬 Chat & Transform")
+    
+    # Chat Container
+    chat_container = st.container(height=400)
+    with chat_container:
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+    user_input = st.chat_input("Describe how you want to clean the data…")
+    
+    if user_input:
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        tool_call = route_user_request(user_input, st.session_state.column_types)
+        
+        if tool_call:
+            description = describe_tool_call(tool_call)
+            st.session_state.pending_tool_call = tool_call
+            st.session_state.chat_history.append({
+                "role": "assistant", 
+                "content": f"**Proposed action:**\n\n{description}"
+            })
+        else:
+            st.session_state.chat_history.append({
+                "role": "assistant", 
+                "content": "I couldn’t map that request to a valid cleaning action."
+            })
+        st.rerun()
+
+    # CONFIRMATION BLOCK
+    if st.session_state.pending_tool_call:
+        st.divider()
+        st.warning("⚠️ Confirm Action")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ Apply Transformation"):
+                st.session_state.df_history.append(st.session_state.cleaned_df.copy()) # Push to history
+                st.session_state.executed_actions.append(st.session_state.pending_tool_call) # Track action
+                
+                st.session_state.cleaned_df = execute_tool(
+                    st.session_state.cleaned_df,
+                    st.session_state.pending_tool_call,
+                    st.session_state.column_types
+                )
+                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                st.session_state.has_cleaning_applied = True
+                
+                st.session_state.chat_history.append({"role": "assistant", "content": "✅ Applied!"})
+                st.session_state.pending_tool_call = None
+                st.rerun()
+        with c2:
+            if st.button("❌ Cancel"):
+                st.session_state.chat_history.append({"role": "assistant", "content": "🚫 Cancelled."})
+                st.session_state.pending_tool_call = None
+                st.rerun()
+                
+    st.divider()
+    
+    # ACTIONS: UNDO / DOWNLOAD
+    ac1, ac2 = st.columns(2)
+    with ac1:
+        if st.session_state.has_cleaning_applied:
+            csv = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Result", data=csv, file_name="cleaned_data.csv", mime="text/csv")
+            
+    with ac2:
+        if st.session_state.df_history:
+            if st.button("↩️ Undo Last Action"):
+                st.session_state.cleaned_df = st.session_state.df_history.pop()
+                if st.session_state.executed_actions:
+                    st.session_state.executed_actions.pop()
+                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                st.rerun()
+
+
+# ========================
 # TAB 3: MANUAL TRANSFORM
 # ========================
 with tab_manual:
