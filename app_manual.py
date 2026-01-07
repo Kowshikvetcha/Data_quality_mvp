@@ -157,6 +157,10 @@ with tab_inspector:
             st.metric("Health Score (Cleaned)", clean_health["score"], delta=delta)
             st.caption("Issues Found:")
             st.dataframe(clean_summary, use_container_width=True)
+            
+            st.divider()
+            csv = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Result", data=csv, file_name="cleaned_data.csv", mime="text/csv", type="primary")
         else:
             st.info("Apply transformations in the 'Chat & Transform' tab to see results here.")
 
@@ -255,21 +259,14 @@ with tab_chat:
                 
     st.divider()
     
-    # ACTIONS: UNDO / DOWNLOAD
-    ac1, ac2 = st.columns(2)
-    with ac1:
-        if st.session_state.has_cleaning_applied:
-            csv = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Result", data=csv, file_name="cleaned_data.csv", mime="text/csv")
-            
-    with ac2:
-        if st.session_state.df_history:
-            if st.button("↩️ Undo Last Action"):
-                st.session_state.cleaned_df = st.session_state.df_history.pop()
-                if st.session_state.executed_actions:
-                    st.session_state.executed_actions.pop()
-                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-                st.rerun()
+    # ACTIONS: UNDO
+    if st.session_state.df_history:
+        if st.button("↩️ Undo Last Action"):
+            st.session_state.cleaned_df = st.session_state.df_history.pop()
+            if st.session_state.executed_actions:
+                st.session_state.executed_actions.pop()
+            st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+            st.rerun()
 
 
 # ========================
