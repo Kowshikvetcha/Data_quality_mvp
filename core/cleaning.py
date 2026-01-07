@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def fill_nulls(df: pd.DataFrame, column: str, method: str) -> pd.DataFrame:
+def fill_nulls(df: pd.DataFrame, column: str, method: str, value: any = None) -> pd.DataFrame:
     df = df.copy()
 
     if method == "mean":
@@ -12,6 +12,31 @@ def fill_nulls(df: pd.DataFrame, column: str, method: str) -> pd.DataFrame:
         df[column] = df[column].fillna(df[column].mode().iloc[0])
     elif method == "zero":
         df[column] = df[column].fillna(0)
+    elif method == "ffill":
+        df[column] = df[column].ffill()
+    elif method == "bfill":
+        df[column] = df[column].bfill()
+    elif method == "custom":
+        if value is None:
+            raise ValueError("Must provide 'value' when method is 'custom'")
+            
+        # Basic Type matching check
+        col_dtype = df[column].dtype
+        
+        # Helper to check if value matches column type roughly
+        is_numeric_col = pd.api.types.is_numeric_dtype(col_dtype)
+        is_float_val = isinstance(value, float)
+        is_int_val = isinstance(value, int)
+        is_number_val = is_float_val or is_int_val
+        
+        if is_numeric_col and not is_number_val:
+            # Try converting if it's a string looking like a number?
+            # User requirement: "if the value given by user is same type"
+            # We strictly enforce. Or strict-ish (allow float for int col if it's whole?)
+            # Let's enforce strictly that numeric cols need numeric values.
+            raise TypeError(f"Column '{column}' is numeric, but provided value '{value}' is {type(value).__name__}")
+            
+        df[column] = df[column].fillna(value)
     else:
         raise ValueError(f"Unsupported fill method: {method}")
 
@@ -20,24 +45,26 @@ def fill_nulls(df: pd.DataFrame, column: str, method: str) -> pd.DataFrame:
 
 def trim_spaces(df: pd.DataFrame, column: str) -> pd.DataFrame:
     df = df.copy()
-    df[column] = df[column].astype(str).str.strip()
-    df.loc[df[column] == "nan", column] = None
+    mask = df[column].notna()
+    df.loc[mask, column] = df.loc[mask, column].astype(str).str.strip()
+    # Convert empty strings to None
+    df.loc[df[column] == '', column] = None
     return df
 
 
 def standardize_case(df: pd.DataFrame, column: str, case: str) -> pd.DataFrame:
     df = df.copy()
+    mask = df[column].notna()
 
     if case == "lower":
-        df[column] = df[column].astype(str).str.lower()
+        df.loc[mask, column] = df.loc[mask, column].astype(str).str.lower()
     elif case == "upper":
-        df[column] = df[column].astype(str).str.upper()
+        df.loc[mask, column] = df.loc[mask, column].astype(str).str.upper()
     elif case == "title":
-        df[column] = df[column].astype(str).str.title()
+        df.loc[mask, column] = df.loc[mask, column].astype(str).str.title()
     else:
         raise ValueError("Invalid case option")
 
-    df.loc[df[column] == "nan", column] = None
     return df
 
 
@@ -118,8 +145,74 @@ def bin_numeric(df: pd.DataFrame, column: str, bins: int, labels: list = None) -
     return df
 
 
+def remove_outliers(df: pd.DataFrame, column: str, method: str = 'iqr', action: str = 'null', value: any = None) -> pd.DataFrame:
+    df = df.copy()
+    series = df[column].dropna()
+    
+    if method == 'iqr':
+        q1 = series.quantile(0.25)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        mask = (df[column] < lower) | (df[column] > upper)
+    elif method == 'zscore':
+        mean_val = series.mean()
+        std_val = series.std()
+        if std_val == 0:
+            return df
+        z_scores = (df[column] - mean_val) / std_val
+        mask = z_scores.abs() > 3
+    else:
+        raise ValueError(f"Unsupported outlier method: {method}")
+    
+    if action == 'replace' and isinstance(value, str) and value.lower() in ['mean', 'median']:
+        action = value.lower()
+
+    if action == 'drop':
+        df = df[~mask].copy()
+    elif action == 'null':
+        df.loc[mask, column] = None
+    elif action == 'clip':
+        if method == 'iqr':
+            df[column] = df[column].clip(lower=lower, upper=upper)
+        else:
+             # For z-score 3 means roughly mean +/- 3*std
+             df[column] = df[column].clip(lower=mean_val - 3*std_val, upper=mean_val + 3*std_val)
+    elif action == 'replace':
+        if value is None:
+             raise ValueError("Must provide 'value' when action is 'replace'")
+             
+        # Type check
+        is_numeric_col = pd.api.types.is_numeric_dtype(df[column])
+        is_number_val = isinstance(value, (int, float))
+        if is_numeric_col and not is_number_val:
+             raise TypeError(f"Column '{column}' is numeric, but provided outlier replacement '{value}' is {type(value).__name__}")
+             
+        df.loc[mask, column] = value
+    elif action == 'mean':
+        # Calculate mean of NON-outlier values to avoid skew
+        valid_mean = df.loc[~mask, column].mean()
+        df.loc[mask, column] = valid_mean
+    elif action == 'median':
+        # Calculate median of NON-outlier values
+        valid_median = df.loc[~mask, column].median()
+        df.loc[mask, column] = valid_median
+    else:
+         raise ValueError(f"Unsupported action: {action}")
+         
+    return df
+
+
 def replace_negative_values(df: pd.DataFrame, column: str, replacement_value: float = 0.0) -> pd.DataFrame:
     df = df.copy()
+    
+    # Type check for robustness
+    is_numeric_col = pd.api.types.is_numeric_dtype(df[column])
+    is_number_val = isinstance(replacement_value, (int, float))
+    if is_numeric_col and not is_number_val:
+         raise TypeError(f"Column '{column}' is numeric, but provided replacement '{replacement_value}' is {type(replacement_value).__name__}")
+
     mask = df[column] < 0
     if mask.any():
         df.loc[mask, column] = replacement_value
@@ -131,28 +224,34 @@ def replace_negative_values(df: pd.DataFrame, column: str, replacement_value: fl
 # -------------------------
 def replace_text(df: pd.DataFrame, column: str, old_val: str, new_val: str) -> pd.DataFrame:
     df = df.copy()
-    # Using regex=False for simple substring replacement, or regex=True if flexible. 
-    # Usually "replace text" implies substrings. 
-    df[column] = df[column].astype(str).str.replace(old_val, new_val, regex=False)
-    # Restore NaNs if they became string "nan" or "None" unexpectedly, though astype(str) usually handles it.
+    mask = df[column].notna()
+    # Using regex=False for simple substring replacement
+    df.loc[mask, column] = df.loc[mask, column].astype(str).str.replace(old_val, new_val, regex=False)
+    # Convert empty strings to None (if replacement resulted in empty)
+    df.loc[df[column] == '', column] = None
     return df
 
 
 def remove_special_chars(df: pd.DataFrame, column: str) -> pd.DataFrame:
     df = df.copy()
+    mask = df[column].notna()
     # Keep only alphanumeric and whitespace
-    df[column] = df[column].astype(str).str.replace(r'[^a-zA-Z0-9\s]', '', regex=True)
+    df.loc[mask, column] = df.loc[mask, column].astype(str).str.replace(r'[^a-zA-Z0-9\s]', '', regex=True)
+    # Convert empty strings to None
+    df.loc[df[column] == '', column] = None
     return df
 
 
 def pad_string(df: pd.DataFrame, column: str, width: int, fillchar: str = '0', side: str = 'left') -> pd.DataFrame:
     df = df.copy()
+    mask = df[column].notna()
+    
     if side == 'left':
-        df[column] = df[column].astype(str).str.pad(width, side='left', fillchar=fillchar)
+        df.loc[mask, column] = df.loc[mask, column].astype(str).str.pad(width, side='left', fillchar=fillchar)
     elif side == 'right':
-        df[column] = df[column].astype(str).str.pad(width, side='right', fillchar=fillchar)
+        df.loc[mask, column] = df.loc[mask, column].astype(str).str.pad(width, side='right', fillchar=fillchar)
     elif side == 'both':
-        df[column] = df[column].astype(str).str.pad(width, side='both', fillchar=fillchar)
+        df.loc[mask, column] = df.loc[mask, column].astype(str).str.pad(width, side='both', fillchar=fillchar)
     else:
         raise ValueError(f"Unsupported padding side: {side}")
     return df
@@ -160,13 +259,17 @@ def pad_string(df: pd.DataFrame, column: str, width: int, fillchar: str = '0', s
 
 def slice_string(df: pd.DataFrame, column: str, start: int = 0, end: int = None) -> pd.DataFrame:
     df = df.copy()
-    df[column] = df[column].astype(str).str.slice(start, end)
+    mask = df[column].notna()
+    df.loc[mask, column] = df.loc[mask, column].astype(str).str.slice(start, end)
+    # Convert empty strings to None if slice results in empty
+    df.loc[df[column] == '', column] = None
     return df
 
 
 def add_prefix_suffix(df: pd.DataFrame, column: str, prefix: str = "", suffix: str = "") -> pd.DataFrame:
     df = df.copy()
-    df[column] = prefix + df[column].astype(str) + suffix
+    mask = df[column].notna()
+    df.loc[mask, column] = prefix + df.loc[mask, column].astype(str) + suffix
     return df
 
 
@@ -247,4 +350,45 @@ def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today'
     else:
         raise ValueError(f"Unsupported unit for difference: {unit}")
         
+    return df
+
+
+def convert_column_type(df: pd.DataFrame, column: str, target_type: str) -> pd.DataFrame:
+    df = df.copy()
+    
+    if target_type == "numeric":
+        df[column] = pd.to_numeric(df[column], errors='coerce')
+    elif target_type == "string":
+        # Ensure None stays None if possible, or convert all to str
+        # simple astype(str) converts None to 'None' usually.
+        # Better: apply str only to notnull?
+        mask = df[column].notna()
+        df.loc[mask, column] = df.loc[mask, column].astype(str)
+        # If we want to force string type even for nulls (as 'None' or ''), usually we leave them as None/NaN in pandas for objects.
+    elif target_type == "datetime":
+        df[column] = pd.to_datetime(df[column], errors='coerce')
+    elif target_type == "boolean":
+        # Smart boolean conversion
+        # 1/0, yes/no, true/false case insensitive
+        true_vals = {'true', 'yes', '1', '1.0', 't', 'y'}
+        false_vals = {'false', 'no', '0', '0.0', 'f', 'n'}
+        
+        def to_bool_safe(x):
+            if pd.isna(x):
+                return None
+            s = str(x).lower().strip()
+            if s in true_vals:
+                return True
+            if s in false_vals:
+                return False
+            return None # Failed to parse
+            
+        # apply returns object series with True/False/None
+        # astype('boolean') makes it Nullable Boolean (pandas extension type)
+        df[column] = df[column].apply(to_bool_safe).astype('boolean') 
+    elif target_type == "categorical":
+        df[column] = df[column].astype('category')
+    else:
+        raise ValueError(f"Unsupported target type: {target_type}")
+
     return df

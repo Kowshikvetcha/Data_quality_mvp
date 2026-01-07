@@ -10,7 +10,11 @@ CLEANING_TOOLS = [
                     "column": {"type": "string"},
                     "method": {
                         "type": "string",
-                        "enum": ["mean", "median", "mode", "zero"]
+                        "enum": ["mean", "median", "mode", "zero", "ffill", "bfill", "custom"]
+                    },
+                    "value": {
+                        "type": ["string", "number", "boolean", "null"],
+                        "description": "Custom value to fill nulls with (required if method is 'custom')"
                     }
                 },
                 "required": ["column", "method"]
@@ -93,6 +97,34 @@ CLEANING_TOOLS = [
                     "column": {"type": "string"},
                     "lower": {"type": "number"},
                     "upper": {"type": "number"}
+                },
+                "required": ["column"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_outliers",
+            "description": "Detect and remove or handle outliers in a numeric column",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "method": {
+                        "type": "string",
+                        "enum": ["iqr", "zscore"],
+                        "description": "Method to detect outliers (IQR or Z-Score). Default 'iqr'."
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["null", "drop", "clip", "replace", "mean", "median"],
+                        "description": "Action to take: 'null', 'drop', 'clip', 'replace', 'mean', 'median'. Default 'null'."
+                    },
+                    "value": {
+                        "type": ["string", "number", "boolean", "null"],
+                        "description": "Value to replace outliers with (required if action is 'replace')"
+                    }
                 },
                 "required": ["column"]
             }
@@ -305,6 +337,24 @@ CLEANING_TOOLS = [
                     "unit": {"type": "string", "enum": ["days", "weeks", "hours", "years"]}
                 },
                 "required": ["column"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "convert_column_type",
+            "description": "Convert a column to a specific data type (numeric, string, datetime, boolean, categorical)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "target_type": {
+                        "type": "string",
+                        "enum": ["numeric", "string", "datetime", "boolean", "categorical"]
+                    }
+                },
+                "required": ["column", "target_type"]
             }
         }
     }

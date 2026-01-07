@@ -17,7 +17,9 @@ from core.cleaning import (
     convert_to_datetime,
     extract_date_part,
     offset_date,
-    date_difference
+    date_difference,
+    remove_outliers,
+    convert_column_type
 )
 
 
@@ -58,6 +60,11 @@ def execute_tool(df, tool_call, column_types):
         if column_types[col] != "numeric":
             raise ValueError("Clipping only for numeric columns")
         return clip_numeric(df, **args)
+
+    if name == "remove_outliers":
+        if column_types[col] != "numeric":
+            raise ValueError("Outlier removal only for numeric columns")
+        return remove_outliers(df, **args)
 
     if name == "scale_numeric":
         if column_types[col] != "numeric":
@@ -117,5 +124,8 @@ def execute_tool(df, tool_call, column_types):
 
     if name == "date_difference":
         return date_difference(df, **args)
+        
+    if name == "convert_column_type":
+        return convert_column_type(df, **args)
 
     raise ValueError(f"Unsupported tool: {name}")

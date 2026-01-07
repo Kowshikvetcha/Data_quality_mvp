@@ -6,6 +6,12 @@ def describe_tool_call(tool_call: dict) -> str:
     args = tool_call["arguments"]
 
     if name == "fill_nulls":
+        if args['method'] == 'custom':
+            return f"Fill nulls in '{args['column']}' with custom value: {args.get('value')}."
+        if args['method'] == 'ffill':
+             return f"Fill nulls in '{args['column']}' using Forward Fill (previous valid value)."
+        if args['method'] == 'bfill':
+             return f"Fill nulls in '{args['column']}' using Backward Fill (next valid value)."
         return f"Fill nulls in '{args['column']}' using {args['method']}."
     if name == "trim_spaces":
         return f"Trim spaces in '{args['column']}'."
@@ -24,6 +30,14 @@ def describe_tool_call(tool_call: dict) -> str:
         return f"Apply {args['operation']} to '{args['column']}'."
     if name == "bin_numeric":
         return f"Bin '{args['column']}' into {args['bins']} bins."
+    
+    if name == "remove_outliers":
+        action = args.get('action', 'null')
+        if action == 'replace':
+             return f"Replace outliers in '{args['column']}' (using {args.get('method', 'iqr')}) with {args.get('value')}."
+        if action in ['mean', 'median']:
+             return f"Replace outliers in '{args['column']}' (using {args.get('method', 'iqr')}) with column {action}."
+        return f"Remove outliers from '{args['column']}' using {args.get('method', 'iqr')} method (action: {action})."
 
     if name == "replace_negative_values":
         val = args.get('replacement_value', 0.0)
@@ -49,6 +63,9 @@ def describe_tool_call(tool_call: dict) -> str:
         return f"Offset '{args['column']}' by {args['value']} {args['unit']}."
     if name == "date_difference":
         return f"Calculate difference in {args['unit']} between '{args['column']}' and {args['reference_date']}."
+        
+    if name == "convert_column_type":
+        return f"Convert '{args['column']}' to {args['target_type']} type."
 
     return "Unknown action"
 

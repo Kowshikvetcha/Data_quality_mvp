@@ -123,13 +123,16 @@ with tab_inspector:
     
     with col2:
         st.subheader("Current Cleaned Data")
-        st.dataframe(st.session_state.cleaned_df.head(50), use_container_width=True)
-        clean_summary, clean_health = run_quality_checks(st.session_state.cleaned_df)
-        
-        delta = round(clean_health["score"] - orig_health["score"], 2)
-        st.metric("Health Score (Cleaned)", clean_health["score"], delta=delta)
-        st.caption("Issues Found:")
-        st.dataframe(clean_summary, use_container_width=True)
+        if st.session_state.has_cleaning_applied:
+            st.dataframe(st.session_state.cleaned_df.head(50), use_container_width=True)
+            clean_summary, clean_health = run_quality_checks(st.session_state.cleaned_df)
+            
+            delta = round(clean_health["score"] - orig_health["score"], 2)
+            st.metric("Health Score (Cleaned)", clean_health["score"], delta=delta)
+            st.caption("Issues Found:")
+            st.dataframe(clean_summary, use_container_width=True)
+        else:
+            st.info("Apply transformations in the 'Chat & Transform' tab to see results here.")
 
     st.divider()
     st.subheader("🔍 Column Profiles & Distributions")
