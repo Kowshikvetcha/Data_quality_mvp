@@ -41,6 +41,8 @@ def describe_tool_call(tool_call: dict) -> str:
 
     if name == "replace_negative_values":
         val = args.get('replacement_value', 0.0)
+        if isinstance(val, str) and val.lower() in ['mean', 'median']:
+             return f"Replace negative values in '{args['column']}' with column {val}."
         return f"Replace negative values in '{args['column']}' with {val}."
 
     if name == "replace_text":

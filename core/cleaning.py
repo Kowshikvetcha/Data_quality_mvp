@@ -204,12 +204,36 @@ def remove_outliers(df: pd.DataFrame, column: str, method: str = 'iqr', action: 
     return df
 
 
-def replace_negative_values(df: pd.DataFrame, column: str, replacement_value: float = 0.0) -> pd.DataFrame:
+def replace_negative_values(df: pd.DataFrame, column: str, replacement_value: Union[float, str] = 0.0) -> pd.DataFrame:
     df = df.copy()
     
+    # Handle statistical replacement keys
+    if isinstance(replacement_value, str):
+        if replacement_value.lower() in ['mean', 'median']:
+            # Calculate stat from ONLY non-negative values (assuming negatives are errors)
+            non_negative_data = df[df[column] >= 0][column]
+            
+            if replacement_value.lower() == 'mean':
+                val = non_negative_data.mean()
+            else: # median
+                val = non_negative_data.median()
+                
+            # If calculation failed (e.g. all empty), fallback to 0
+            if pd.isna(val):
+                val = 0.0
+                
+            replacement_value = val
+        else:
+             # Try to parse string as number if possible
+             try:
+                 replacement_value = float(replacement_value)
+             except ValueError:
+                 pass # Will fail type check below if still string
+
     # Type check for robustness
     is_numeric_col = pd.api.types.is_numeric_dtype(df[column])
     is_number_val = isinstance(replacement_value, (int, float))
+    
     if is_numeric_col and not is_number_val:
          raise TypeError(f"Column '{column}' is numeric, but provided replacement '{replacement_value}' is {type(replacement_value).__name__}")
 

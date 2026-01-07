@@ -191,8 +191,8 @@ CLEANING_TOOLS = [
                 "properties": {
                     "column": {"type": "string"},
                     "replacement_value": {
-                        "type": "number",
-                        "description": "Value to replace negative numbers with. Defaults to 0 if not specified."
+                        "type": ["number", "string"],
+                        "description": "Value to replace negative numbers with (number) or statistical method ('mean', 'median'). Defaults to 0."
                     }
                 },
                 "required": ["column"]
