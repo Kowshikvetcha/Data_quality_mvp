@@ -71,6 +71,18 @@ def run_quality_checks(df):
 # ------------------------
 with st.sidebar:
     st.title("🧹 AI Cleaner")
+    
+    # Navigation
+    current_page = "🕵️ Data Inspector"
+    if st.session_state.original_df is not None:
+        current_page = st.radio("Navigate", [
+            "🕵️ Data Inspector", 
+            "💬 Chat & Transform", 
+            "🛠️ Manual Transform",
+            "📜 History & Code"
+        ])
+        st.divider()
+    
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
     
     if uploaded_file and st.session_state.original_df is None:
@@ -79,6 +91,7 @@ with st.sidebar:
         st.session_state.cleaned_df = df.copy()
         st.session_state.column_types = infer_all_column_types(df)
         st.success("Loaded!")
+        st.rerun()
 
     if st.session_state.original_df is not None:
         st.divider()
@@ -124,17 +137,19 @@ if st.session_state.last_notification:
 # MAIN TABS
 # ------------------------
 # ------------------------
-tab_inspector, tab_chat, tab_manual, tab_history = st.tabs([
-    "🕵️ Data Inspector", 
-    "💬 Chat & Transform", 
-    "🛠️ Manual Transform",
-    "📜 History & Code"
-])
+# ------------------------
+# PAGE ROUTING
+# ------------------------
+# Using if-statements based on sidebar selection instead of st.tabs
+# to prevent unwanted re-rendering/resetting of state during interactions.
 
 # ========================
 # TAB 1: INSPECTOR
 # ========================
-with tab_inspector:
+# ========================
+# TAB 1: INSPECTOR
+# ========================
+if current_page == "🕵️ Data Inspector":
     st.header("🔎 Data Inspector")
     
     col1, col2 = st.columns(2)
@@ -200,7 +215,10 @@ with tab_inspector:
 # ========================
 # TAB 2: CHAT & TRANSFORM
 # ========================
-with tab_chat:
+# ========================
+# TAB 2: CHAT & TRANSFORM
+# ========================
+if current_page == "💬 Chat & Transform":
     st.header("💬 Chat & Transform")
     
     # Chat Container
@@ -272,7 +290,10 @@ with tab_chat:
 # ========================
 # TAB 3: MANUAL TRANSFORM
 # ========================
-with tab_manual:
+# ========================
+# TAB 3: MANUAL TRANSFORM
+# ========================
+if current_page == "🛠️ Manual Transform":
     st.header("🛠️ Manual Transformation")
     st.info("Select a column and an operation to apply directly.")
     
@@ -420,7 +441,10 @@ with tab_manual:
 # TAB 3: HISTORY & CODE (renamed/reordered logic but variable name is tab_history)
 # ========================
 # (Original Tab 4 content starts here but variable tab_history is used)
-with tab_history:
+# ========================
+# TAB 3: HISTORY & CODE
+# ========================
+if current_page == "📜 History & Code":
     st.header("📜 Audit Log & Code")
     
     st.info("History of actions and reproducible script.")
