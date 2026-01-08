@@ -182,7 +182,25 @@ if current_page == "🕵️ Data Inspector":
     st.divider()
     st.subheader("🔍 Column Profiles & Distributions")
     
-    selected_col = st.selectbox("Select Column to Visualize", st.session_state.cleaned_df.columns)
+    # Persistence logic for column selection
+    if "inspector_selected_col_name" not in st.session_state:
+        st.session_state.inspector_selected_col_name = st.session_state.cleaned_df.columns[0]
+        
+    cols = st.session_state.cleaned_df.columns.tolist()
+    current_index = 0
+    if st.session_state.inspector_selected_col_name in cols:
+        current_index = cols.index(st.session_state.inspector_selected_col_name)
+    
+    def on_change_col():
+        st.session_state.inspector_selected_col_name = st.session_state.inspector_viz_key
+        
+    selected_col = st.selectbox(
+        "Select Column to Visualize", 
+        cols, 
+        index=current_index,
+        key="inspector_viz_key",
+        on_change=on_change_col
+    )
     
     viz_col1, viz_col2 = st.columns(2)
     with viz_col1:
@@ -399,7 +417,7 @@ if current_page == "🛠️ Manual Transform":
     with st.expander("Text Operations"):
         c_txt1, c_txt2, c_txt3 = st.columns(3)
         with c_txt1:
-            col_txt = st.selectbox("String Column", [c for c in cols if pd.api.types.is_string_dtype(st.session_state.cleaned_df[c])], key="txt_col")
+            col_txt = st.selectbox("String Column", [c for c in cols if pd.api.types.is_string_dtype(st.session_state.cleaned_df[c]) or st.session_state.cleaned_df[c].dtype == "object"], key="txt_col")
         with c_txt2:
             op_txt = st.selectbox("Operation", ["Trim", "Lower", "Upper", "Title", "Remove Special", "Replace Text"], key="txt_op")
         with c_txt3:
