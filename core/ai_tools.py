@@ -357,5 +357,196 @@ CLEANING_TOOLS = [
                 "required": ["column", "target_type"]
             }
         }
+    },
+    # -------------------------
+    # Dataset-level Operations
+    # -------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "deduplicate_rows",
+            "description": "Remove duplicate rows from the dataset",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subset": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of columns to consider for duplicates. If not provided, uses all columns."
+                    },
+                    "keep": {
+                        "type": "string",
+                        "enum": ["first", "last"],
+                        "description": "Which duplicate to keep. Default 'first'."
+                    }
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drop_column",
+            "description": "Remove a column from the dataset",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"}
+                },
+                "required": ["column"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename_column",
+            "description": "Rename a column in the dataset",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "description": "Current column name"},
+                    "new_name": {"type": "string", "description": "New column name"}
+                },
+                "required": ["column", "new_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "split_column",
+            "description": "Split a column by delimiter into multiple new columns",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "description": "Column to split"},
+                    "delimiter": {"type": "string", "description": "String to split on (e.g., ',', ' ', '-')"},
+                    "new_columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Names for the resulting columns"
+                    },
+                    "keep_original": {
+                        "type": "boolean",
+                        "description": "Whether to keep the original column. Default false."
+                    }
+                },
+                "required": ["column", "delimiter", "new_columns"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "merge_columns",
+            "description": "Merge multiple columns into a new column",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to merge"
+                    },
+                    "separator": {"type": "string", "description": "String to use between values (e.g., ' ', ', ')"},
+                    "new_column": {"type": "string", "description": "Name for the merged column"},
+                    "drop_original": {
+                        "type": "boolean",
+                        "description": "Whether to drop the original columns. Default true."
+                    }
+                },
+                "required": ["columns", "separator", "new_column"]
+            }
+        }
+    },
+    # -------------------------
+    # Batch Operations
+    # -------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "fill_nulls_batch",
+            "description": "Fill missing values in multiple columns at once using the same method",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to fill"
+                    },
+                    "method": {
+                        "type": "string",
+                        "enum": ["mean", "median", "mode", "zero", "ffill", "bfill", "custom"]
+                    },
+                    "value": {
+                        "type": ["string", "number", "boolean", "null"],
+                        "description": "Custom value to fill nulls with (required if method is 'custom')"
+                    }
+                },
+                "required": ["columns", "method"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trim_spaces_batch",
+            "description": "Trim leading and trailing spaces from multiple string columns at once",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to trim. Use 'all' to trim all string columns."
+                    }
+                },
+                "required": ["columns"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "standardize_case_batch",
+            "description": "Standardize text casing in multiple string columns at once",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to standardize"
+                    },
+                    "case": {
+                        "type": "string",
+                        "enum": ["lower", "upper", "title"]
+                    }
+                },
+                "required": ["columns", "case"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drop_columns_batch",
+            "description": "Remove multiple columns from the dataset at once",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to drop"
+                    }
+                },
+                "required": ["columns"]
+            }
+        }
     }
 ]
+

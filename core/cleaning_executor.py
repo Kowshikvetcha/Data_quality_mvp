@@ -19,16 +19,29 @@ from core.cleaning import (
     offset_date,
     date_difference,
     remove_outliers,
-    convert_column_type
+    convert_column_type,
+    # New functions
+    deduplicate_rows,
+    drop_column,
+    rename_column,
+    split_column,
+    merge_columns,
+    fill_nulls_batch,
+    trim_spaces_batch,
+    standardize_case_batch,
+    drop_columns_batch,
 )
 
 
 def execute_tool(df, tool_call, column_types):
     name = tool_call["tool_name"]
     args = tool_call["arguments"]
-    col = args["column"]
+    
+    # Some tools don't require a column argument
+    col = args.get("column", None)
 
-    if col not in df.columns:
+    # Validate column exists for tools that require it
+    if col is not None and col not in df.columns:
         raise ValueError(f"Column '{col}' not found")
 
     # Basic cleaning tools
@@ -128,4 +141,53 @@ def execute_tool(df, tool_call, column_types):
     if name == "convert_column_type":
         return convert_column_type(df, **args)
 
+    # -------------------------
+    # Dataset-level Operations
+    # -------------------------
+    if name == "deduplicate_rows":
+        return deduplicate_rows(df, **args)
+
+    if name == "drop_column":
+        return drop_column(df, **args)
+
+    if name == "rename_column":
+        return rename_column(df, **args)
+
+    # -------------------------
+    # Column Split/Merge
+    # -------------------------
+    if name == "split_column":
+        return split_column(df, **args)
+
+    if name == "merge_columns":
+        return merge_columns(df, **args)
+
+    # -------------------------
+    # Batch Operations
+    # -------------------------
+    if name == "fill_nulls_batch":
+        # Handle 'all' keyword for columns
+        cols = args.get("columns", [])
+        if cols == ["all"] or "all" in cols:
+            args["columns"] = list(df.columns)
+        return fill_nulls_batch(df, **args)
+
+    if name == "trim_spaces_batch":
+        # Handle 'all' keyword for columns
+        cols = args.get("columns", [])
+        if cols == ["all"] or "all" in cols:
+            args["columns"] = [c for c in df.columns if df[c].dtype == 'object']
+        return trim_spaces_batch(df, **args)
+
+    if name == "standardize_case_batch":
+        # Handle 'all' keyword for columns
+        cols = args.get("columns", [])
+        if cols == ["all"] or "all" in cols:
+            args["columns"] = [c for c in df.columns if df[c].dtype == 'object']
+        return standardize_case_batch(df, **args)
+
+    if name == "drop_columns_batch":
+        return drop_columns_batch(df, **args)
+
     raise ValueError(f"Unsupported tool: {name}")
+

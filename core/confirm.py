@@ -69,6 +69,61 @@ def describe_tool_call(tool_call: dict) -> str:
     if name == "convert_column_type":
         return f"Convert '{args['column']}' to {args['target_type']} type."
 
+    # -------------------------
+    # Dataset-level Operations
+    # -------------------------
+    if name == "deduplicate_rows":
+        subset = args.get('subset')
+        keep = args.get('keep', 'first')
+        if subset:
+            return f"Remove duplicate rows (based on columns: {', '.join(subset)}, keep: {keep})."
+        return f"Remove duplicate rows (keep: {keep})."
+    
+    if name == "drop_column":
+        return f"Drop column '{args['column']}' from dataset."
+    
+    if name == "rename_column":
+        return f"Rename column '{args['column']}' to '{args['new_name']}'."
+
+    # -------------------------
+    # Split/Merge Operations
+    # -------------------------
+    if name == "split_column":
+        new_cols = ", ".join(args['new_columns'])
+        return f"Split '{args['column']}' by '{args['delimiter']}' into columns: {new_cols}."
+    
+    if name == "merge_columns":
+        cols = ", ".join(args['columns'])
+        return f"Merge columns [{cols}] into '{args['new_column']}' (separator: '{args['separator']}')."
+
+    # -------------------------
+    # Batch Operations
+    # -------------------------
+    if name == "fill_nulls_batch":
+        cols = ", ".join(args['columns'][:3])
+        if len(args['columns']) > 3:
+            cols += f" (+{len(args['columns']) - 3} more)"
+        method = args['method']
+        if method == 'custom':
+            return f"Fill nulls in [{cols}] with custom value: {args.get('value')}."
+        return f"Fill nulls in [{cols}] using {method}."
+    
+    if name == "trim_spaces_batch":
+        cols = ", ".join(args['columns'][:3])
+        if len(args['columns']) > 3:
+            cols += f" (+{len(args['columns']) - 3} more)"
+        return f"Trim spaces in [{cols}]."
+    
+    if name == "standardize_case_batch":
+        cols = ", ".join(args['columns'][:3])
+        if len(args['columns']) > 3:
+            cols += f" (+{len(args['columns']) - 3} more)"
+        return f"Standardize [{cols}] to {args['case']} case."
+    
+    if name == "drop_columns_batch":
+        cols = ", ".join(args['columns'])
+        return f"Drop columns: [{cols}]."
+
     return "Unknown action"
 
 

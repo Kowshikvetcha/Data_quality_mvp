@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import List, Union, Optional
 
 
 def fill_nulls(df: pd.DataFrame, column: str, method: str, value: any = None) -> pd.DataFrame:
@@ -416,3 +417,273 @@ def convert_column_type(df: pd.DataFrame, column: str, target_type: str) -> pd.D
         raise ValueError(f"Unsupported target type: {target_type}")
 
     return df
+
+
+# -------------------------
+# Dataset-level Operations
+# -------------------------
+def deduplicate_rows(
+    df: pd.DataFrame, 
+    subset: Optional[List[str]] = None, 
+    keep: str = 'first'
+) -> pd.DataFrame:
+    """
+    Remove duplicate rows from the DataFrame.
+    
+    Args:
+        df: Input DataFrame
+        subset: Optional list of columns to consider for duplicates. If None, uses all columns.
+        keep: 'first', 'last', or False. Which duplicate to keep.
+    """
+    df = df.copy()
+    return df.drop_duplicates(subset=subset, keep=keep)
+
+
+def drop_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """
+    Drop a column from the DataFrame.
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in DataFrame")
+    return df.drop(columns=[column])
+
+
+def rename_column(df: pd.DataFrame, column: str, new_name: str) -> pd.DataFrame:
+    """
+    Rename a column in the DataFrame.
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in DataFrame")
+    if new_name in df.columns:
+        raise ValueError(f"Column '{new_name}' already exists in DataFrame")
+    return df.rename(columns={column: new_name})
+
+
+def reorder_columns(df: pd.DataFrame, column_order: List[str]) -> pd.DataFrame:
+    """
+    Reorder columns in the DataFrame.
+    
+    Args:
+        df: Input DataFrame
+        column_order: List of column names in desired order
+    """
+    df = df.copy()
+    # Add any missing columns at the end
+    remaining = [c for c in df.columns if c not in column_order]
+    return df[column_order + remaining]
+
+
+# -------------------------
+# Column Split/Merge Operations
+# -------------------------
+def split_column(
+    df: pd.DataFrame, 
+    column: str, 
+    delimiter: str, 
+    new_columns: List[str],
+    keep_original: bool = False
+) -> pd.DataFrame:
+    """
+    Split a column by delimiter into multiple new columns.
+    
+    Args:
+        df: Input DataFrame
+        column: Column to split
+        delimiter: String to split on
+        new_columns: Names for the resulting columns
+        keep_original: Whether to keep the original column
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in DataFrame")
+    
+    # Split the column
+    split_result = df[column].astype(str).str.split(delimiter, expand=True)
+    
+    # Assign new column names (handle fewer splits than expected columns)
+    for i, new_col in enumerate(new_columns):
+        if i < split_result.shape[1]:
+            df[new_col] = split_result[i].str.strip()
+            # Convert empty strings to None
+            df.loc[df[new_col] == '', new_col] = None
+        else:
+            df[new_col] = None
+    
+    # Drop original if requested
+    if not keep_original:
+        df = df.drop(columns=[column])
+    
+    return df
+
+
+def merge_columns(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    separator: str, 
+    new_column: str,
+    drop_original: bool = True
+) -> pd.DataFrame:
+    """
+    Merge multiple columns into a new column.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to merge
+        separator: String to use between values
+        new_column: Name for the merged column
+        drop_original: Whether to drop the original columns
+    """
+    df = df.copy()
+    
+    for col in columns:
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in DataFrame")
+    
+    # Merge columns, handling nulls
+    df[new_column] = df[columns].apply(
+        lambda row: separator.join([str(v) for v in row if pd.notna(v)]),
+        axis=1
+    )
+    
+    # Convert empty strings to None
+    df.loc[df[new_column] == '', new_column] = None
+    
+    if drop_original:
+        df = df.drop(columns=columns)
+    
+    return df
+
+
+# -------------------------
+# Batch Operations (Multi-column)
+# -------------------------
+def fill_nulls_batch(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    method: str, 
+    value: any = None
+) -> pd.DataFrame:
+    """
+    Fill nulls in multiple columns using the same method.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to fill
+        method: Fill method ('mean', 'median', 'mode', 'zero', 'ffill', 'bfill', 'custom')
+        value: Custom value (required if method is 'custom')
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+            
+        if method == "mean":
+            if pd.api.types.is_numeric_dtype(df[column]):
+                df[column] = df[column].fillna(df[column].mean())
+        elif method == "median":
+            if pd.api.types.is_numeric_dtype(df[column]):
+                df[column] = df[column].fillna(df[column].median())
+        elif method == "mode":
+            mode_val = df[column].mode()
+            if len(mode_val) > 0:
+                df[column] = df[column].fillna(mode_val.iloc[0])
+        elif method == "zero":
+            df[column] = df[column].fillna(0)
+        elif method == "ffill":
+            df[column] = df[column].ffill()
+        elif method == "bfill":
+            df[column] = df[column].bfill()
+        elif method == "custom" and value is not None:
+            df[column] = df[column].fillna(value)
+    
+    return df
+
+
+def trim_spaces_batch(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """
+    Trim leading and trailing spaces from multiple string columns.
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+        if df[column].dtype == 'object':
+            mask = df[column].notna()
+            df.loc[mask, column] = df.loc[mask, column].astype(str).str.strip()
+            df.loc[df[column] == '', column] = None
+    
+    return df
+
+
+def standardize_case_batch(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    case: str
+) -> pd.DataFrame:
+    """
+    Standardize case for multiple string columns.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to standardize
+        case: 'lower', 'upper', or 'title'
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+        if df[column].dtype == 'object':
+            mask = df[column].notna()
+            if case == "lower":
+                df.loc[mask, column] = df.loc[mask, column].astype(str).str.lower()
+            elif case == "upper":
+                df.loc[mask, column] = df.loc[mask, column].astype(str).str.upper()
+            elif case == "title":
+                df.loc[mask, column] = df.loc[mask, column].astype(str).str.title()
+    
+    return df
+
+
+def drop_columns_batch(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """
+    Drop multiple columns from the DataFrame.
+    """
+    df = df.copy()
+    existing_cols = [c for c in columns if c in df.columns]
+    return df.drop(columns=existing_cols)
+
+
+def convert_columns_batch(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    target_type: str
+) -> pd.DataFrame:
+    """
+    Convert multiple columns to a target type.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to convert
+        target_type: 'numeric', 'string', 'datetime'
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+            
+        if target_type == "numeric":
+            df[column] = pd.to_numeric(df[column], errors='coerce')
+        elif target_type == "string":
+            mask = df[column].notna()
+            df.loc[mask, column] = df.loc[mask, column].astype(str)
+        elif target_type == "datetime":
+            df[column] = pd.to_datetime(df[column], errors='coerce')
+    
+    return df
+

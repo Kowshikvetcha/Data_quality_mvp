@@ -28,7 +28,7 @@ Rules:
 
 def route_user_request(user_message: str, column_types: dict):
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-nano",
         messages=[
             {"role": "system", "content": build_system_prompt(column_types)},
             {"role": "user", "content": user_message}
@@ -36,7 +36,6 @@ def route_user_request(user_message: str, column_types: dict):
         tools=CLEANING_TOOLS,
         tool_choice="auto"
     )
-
     msg = response.choices[0].message
 
     if msg.tool_calls:
