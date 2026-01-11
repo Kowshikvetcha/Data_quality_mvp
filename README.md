@@ -34,21 +34,33 @@ git clone https://github.com/Kowshikvetcha/Data_quality_mvp.git
 cd Data_quality_mvp
 
 ```
-create a virtual environment
+### 2️⃣ Install Dependencies
 
+Create and activate a virtual environment, then install the required packages:
+
+```bash
+python -m venv env
+source env/bin/activate  # On Windows use `env\Scripts\activate`
 pip install -r requirements.txt
+```
 
+### 3️⃣ Configure Environment
 
-create a .env file with
+Create a `.env` file in the root directory and add your OpenAI API key:
 
+```env
+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx
+```
 
-OPENAI_API_KEY=sk-projxxxxxxxxxxxxx
+### 4️⃣ Run the Application
 
-streamlit run app.py
+Start the Pro version of the application:
 
-streamlit run app1.py
+```bash
+streamlit run app_enhanced.py
+```
 
-streamlit run app_manual.py -- for manual transformation of data
+`app_enhanced.py` is the comprehensive Pro version containing the AI chat, manual transformations, advanced visualizations, and data type overrides.
 
 
 
