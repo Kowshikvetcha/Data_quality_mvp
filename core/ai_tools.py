@@ -175,7 +175,8 @@ CLEANING_TOOLS = [
                 "type": "object",
                 "properties": {
                     "column": {"type": "string"},
-                    "bins": {"type": "integer"}
+                    "bins": {"type": "integer"},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column", "bins"]
             }
@@ -212,6 +213,37 @@ CLEANING_TOOLS = [
                     "new_val": {"type": "string"}
                 },
                 "required": ["column", "old_val", "new_val"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_text_regex",
+            "description": "Replace text using a regex pattern",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "pattern": {"type": "string", "description": "Regex pattern to match"},
+                    "replacement": {"type": "string", "description": "Replacement text"}
+                },
+                "required": ["column", "pattern", "replacement"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_calculated_column",
+            "description": "Create a new column based on a formula using other columns (e.g., 'Price * Quantity')",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "new_column_name": {"type": "string"},
+                    "formula": {"type": "string", "description": "Pandas eval string (e.g., 'colA + colB')"}
+                },
+                "required": ["new_column_name", "formula"]
             }
         }
     },
@@ -297,12 +329,13 @@ CLEANING_TOOLS = [
         "type": "function",
         "function": {
             "name": "extract_date_part",
-            "description": "Extract a specific part of a date (e.g. year, month, day)",
+            "description": "Extract a specific part of a date (e.g. year, month, day) into a new or existing column",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "column": {"type": "string"},
-                    "part": {"type": "string", "enum": ["year", "month", "day", "weekday", "quarter"]}
+                    "column": {"type": "string", "description": "Source date column"},
+                    "part": {"type": "string", "enum": ["year", "month", "day", "weekday", "quarter"]},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column", "part"]
             }
@@ -318,7 +351,8 @@ CLEANING_TOOLS = [
                 "properties": {
                     "column": {"type": "string"},
                     "value": {"type": "integer", "description": "Amount to offset (can be negative)"},
-                    "unit": {"type": "string", "enum": ["days", "weeks", "months", "years"]}
+                    "unit": {"type": "string", "enum": ["days", "weeks", "months", "years"]},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column", "value", "unit"]
             }
@@ -334,7 +368,8 @@ CLEANING_TOOLS = [
                 "properties": {
                     "column": {"type": "string"},
                     "reference_date": {"type": "string", "description": "'today' or 'now', or specific date 'YYYY-MM-DD'"},
-                    "unit": {"type": "string", "enum": ["days", "weeks", "hours", "years"]}
+                    "unit": {"type": "string", "enum": ["days", "weeks", "hours", "years"]},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column"]
             }

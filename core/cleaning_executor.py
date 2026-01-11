@@ -30,6 +30,8 @@ from core.cleaning import (
     trim_spaces_batch,
     standardize_case_batch,
     drop_columns_batch,
+    replace_text_regex,
+    create_calculated_column,
 )
 
 
@@ -188,6 +190,14 @@ def execute_tool(df, tool_call, column_types):
 
     if name == "drop_columns_batch":
         return drop_columns_batch(df, **args)
+
+    if name == "replace_text_regex":
+        if column_types[col] != "string":
+            raise ValueError("Regex replacement only for string columns")
+        return replace_text_regex(df, **args)
+
+    if name == "create_calculated_column":
+        return create_calculated_column(df, **args)
 
     raise ValueError(f"Unsupported tool: {name}")
 

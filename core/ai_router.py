@@ -39,10 +39,13 @@ def route_user_request(user_message: str, column_types: dict):
     msg = response.choices[0].message
 
     if msg.tool_calls:
-        tc = msg.tool_calls[0]
-        return {
-            "tool_name": tc.function.name,
-            "arguments": json.loads(tc.function.arguments)
-        }
+        # Return all tool calls
+        actions = []
+        for tc in msg.tool_calls:
+            actions.append({
+                "tool_name": tc.function.name,
+                "arguments": json.loads(tc.function.arguments)
+            })
+        return actions
 
     return None

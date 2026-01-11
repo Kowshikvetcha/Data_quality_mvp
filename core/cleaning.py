@@ -132,17 +132,11 @@ def apply_math(df: pd.DataFrame, column: str, operation: str) -> pd.DataFrame:
     return df
 
 
-def bin_numeric(df: pd.DataFrame, column: str, bins: int, labels: list = None) -> pd.DataFrame:
+def bin_numeric(df: pd.DataFrame, column: str, bins: int, labels: list = None, new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
-    # If labels are not provided, we can let pandas generate range labels, but they are not JSON serializable easily unless converted to str.
-    # For tool usage, creating a new column might be better, but the rule says transformations work on the dataframe. 
-    # Usually binning creates a NEW CATEGORICAL column. 
-    # Let's overwrite or create a new column suffixed with _binned? 
-    # The requirement implicitly assumes "in-place" style transformation on the dataset, but usually binning changes type.
-    # For now, let's create a new column '{column}_binned' to be safe, or overwrite if the user intends to categorize.
-    # To keep it simple and consistent with other functions returning df, we will overwrite the column with categorical data (converted to string for safety).
     
-    df[column] = pd.cut(df[column], bins=bins, labels=labels).astype(str)
+    target_col = new_column if new_column else column
+    df[target_col] = pd.cut(df[column], bins=bins, labels=labels).astype(str)
     return df
 
 
@@ -308,51 +302,55 @@ def convert_to_datetime(df: pd.DataFrame, column: str, format: str = None) -> pd
     return df
 
 
-def extract_date_part(df: pd.DataFrame, column: str, part: str) -> pd.DataFrame:
+def extract_date_part(df: pd.DataFrame, column: str, part: str, new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
-    # Ensure column is datetime
-    if not pd.api.types.is_datetime64_any_dtype(df[column]):
-        df[column] = pd.to_datetime(df[column], errors='coerce')
+    # Ensure column is datetime (source)
+    temp_series = df[column]
+    if not pd.api.types.is_datetime64_any_dtype(temp_series):
+        temp_series = pd.to_datetime(temp_series, errors='coerce')
+    
+    target_col = new_column if new_column else column
     
     if part == 'year':
-        df[column] = df[column].dt.year
+        df[target_col] = temp_series.dt.year
     elif part == 'month':
-        df[column] = df[column].dt.month
+        df[target_col] = temp_series.dt.month
     elif part == 'day':
-        df[column] = df[column].dt.day
+        df[target_col] = temp_series.dt.day
     elif part == 'weekday':
-        df[column] = df[column].dt.day_name()
+        df[target_col] = temp_series.dt.day_name()
     elif part == 'quarter':
-        df[column] = df[column].dt.quarter
+        df[target_col] = temp_series.dt.quarter
     else:
         raise ValueError(f"Unsupported date part: {part}")
         
-    # Convert NaNs to nullable int if possible or keep as float/object
     return df
 
 
-def offset_date(df: pd.DataFrame, column: str, value: int, unit: str) -> pd.DataFrame:
+def offset_date(df: pd.DataFrame, column: str, value: int, unit: str, new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
     if not pd.api.types.is_datetime64_any_dtype(df[column]):
         df[column] = pd.to_datetime(df[column], errors='coerce')
 
+    target_col = new_column if new_column else column
+
     if unit == 'days':
-        df[column] = df[column] + pd.Timedelta(days=value)
+        df[target_col] = df[column] + pd.Timedelta(days=value)
     elif unit == 'weeks':
-        df[column] = df[column] + pd.Timedelta(weeks=value)
+        df[target_col] = df[column] + pd.Timedelta(weeks=value)
     elif unit == 'months':
         from pandas.tseries.offsets import DateOffset
-        df[column] = df[column] + DateOffset(months=value)
+        df[target_col] = df[column] + DateOffset(months=value)
     elif unit == 'years':
         from pandas.tseries.offsets import DateOffset
-        df[column] = df[column] + DateOffset(years=value)
+        df[target_col] = df[column] + DateOffset(years=value)
     else:
         raise ValueError(f"Unsupported time unit: {unit}")
         
     return df
 
 
-def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today', unit: str = 'days') -> pd.DataFrame:
+def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today', unit: str = 'days', new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
     if not pd.api.types.is_datetime64_any_dtype(df[column]):
         df[column] = pd.to_datetime(df[column], errors='coerce')
@@ -364,14 +362,16 @@ def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today'
         
     diff = ref - df[column]
     
+    target_col = new_column if new_column else column
+
     if unit == 'days':
-        df[column] = diff.dt.days
+        df[target_col] = diff.dt.days
     elif unit == 'weeks':
-        df[column] = diff.dt.days / 7
+        df[target_col] = diff.dt.days / 7
     elif unit == 'hours':
-        df[column] = diff.dt.total_seconds() / 3600
+        df[target_col] = diff.dt.total_seconds() / 3600
     elif unit == 'years':
-        df[column] = diff.dt.days / 365.25 # approx
+        df[target_col] = diff.dt.days / 365.25 # approx
     else:
         raise ValueError(f"Unsupported unit for difference: {unit}")
         
@@ -685,5 +685,39 @@ def convert_columns_batch(
         elif target_type == "datetime":
             df[column] = pd.to_datetime(df[column], errors='coerce')
     
+    return df
+
+
+def replace_text_regex(df: pd.DataFrame, column: str, pattern: str, replacement: str) -> pd.DataFrame:
+    """
+    Replace text using regex pattern.
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found")
+        
+    mask = df[column].notna()
+    # Use regex=True
+    df.loc[mask, column] = df.loc[mask, column].astype(str).str.replace(pattern, replacement, regex=True)
+    # Convert empty strings to None
+    df.loc[df[column] == '', column] = None
+    return df
+
+
+def create_calculated_column(df: pd.DataFrame, new_column_name: str, formula: str) -> pd.DataFrame:
+    """
+    Create a new column using a formula (e.g., 'colA + colB' or 'colA * 2').
+    Uses pd.eval for evaluation.
+    """
+    df = df.copy()
+    if new_column_name in df.columns:
+         raise ValueError(f"Column '{new_column_name}' already exists")
+         
+    try:
+        # pd.eval can handle simple arithmetic and column references
+        # We perform it on the dataframe context
+        df[new_column_name] = df.eval(formula)
+    except Exception as e:
+        raise ValueError(f"Failed to evaluate formula '{formula}': {e}")
     return df
 
