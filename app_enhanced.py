@@ -405,98 +405,97 @@ if current_page == "🕵️ Data Inspector":
 # ======================== 
 if current_page == "💬 Chat & Transform":
     st.header("💬 Chat & Transform")
-    
-    # Chat Container
-    chat_container = st.container(height=350)
-    with chat_container:
-        for msg in st.session_state.chat_history:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+    st.markdown("**Interact with AI to clean your data naturally!** Describe your needs, and let the system suggest and apply transformations.")
 
-    user_input = st.chat_input("Describe how you want to clean the data (e.g., 'Remove nulls in Age and standardize City')...")
-    
-    if user_input:
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        tool_calls = route_user_request(user_input, st.session_state.column_types)
-        
-        if tool_calls:
-            # Handle multiple calls
-            if isinstance(tool_calls, list):
-                st.session_state.pending_tool_calls = tool_calls
-                descriptions = [f"{i+1}. {describe_tool_call(tc)}" for i, tc in enumerate(tool_calls)]
-                desc_text = "\n\n".join(descriptions)
-                
-                # Preview logic (for the first one or combined? Complex. Let's just list them)
-                st.session_state.chat_history.append({
-                    "role": "assistant", 
-                    "content": f"**Proposed actions:**\n\n{desc_text}"
-                })
+    # Chat Interface Section
+    with st.container(border=True):
+        st.subheader("🤖 Chat with AI Assistant")
+        chat_container = st.container(height=400, border=False)
+        with chat_container:
+            if not st.session_state.chat_history:
+                st.info("💡 Start by typing a message below, like 'Remove duplicates and fill missing ages with median'.")
+            for msg in st.session_state.chat_history:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"], unsafe_allow_html=True)
+
+        user_input = st.chat_input("Describe your data cleaning request...")
+        if user_input:
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            with st.spinner("🤖 Analyzing your request..."):
+                tool_calls = route_user_request(user_input, st.session_state.column_types)
+
+            if tool_calls:
+                if isinstance(tool_calls, list):
+                    st.session_state.pending_tool_calls = tool_calls
+                    descriptions = [f"🔧 **{i+1}.** {describe_tool_call(tc)}" for i, tc in enumerate(tool_calls)]
+                    desc_text = "\n\n".join(descriptions)
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": f"**Proposed Transformations:**\n\n{desc_text}\n\n*Review and confirm below.*"
+                    })
+                else:
+                    pass
             else:
-                 # Should be list, but just in case
-                 pass
-        else:
-            st.session_state.chat_history.append({
-                "role": "assistant", 
-                "content": "I couldn't map that request to a valid cleaning action."
-            })
-        st.rerun()
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": "❓ I couldn't understand that request. Try rephrasing, e.g., 'Standardize text in column X'."
+                })
+            st.rerun()
 
-    # CONFIRMATION BLOCK
+    # Confirmation Section
     if st.session_state.pending_tool_calls:
         st.divider()
-        st.warning("⚠️ Confirm Action(s)")
-        
-        # Display actions
-        for i, tc in enumerate(st.session_state.pending_tool_calls):
-            st.write(f"**Action {i+1}:** {describe_tool_call(tc)}")
-            
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("✅ Apply All Transformations", type="primary"):
-                st.session_state.df_history.append(st.session_state.cleaned_df.copy())
-                
-                # Apply sequentially
-                success_count = 0
-                for tc in st.session_state.pending_tool_calls:
-                    try:
-                        st.session_state.cleaned_df = execute_tool(
-                            st.session_state.cleaned_df,
-                            tc,
-                            st.session_state.column_types
-                        )
-                        st.session_state.executed_actions.append(tc)
-                        success_count += 1
-                    except Exception as e:
-                        st.error(f"Error executing action {tc['tool_name']}: {e}")
-                        break
-                
-                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-                st.session_state.has_cleaning_applied = True
-                refresh_suggestions()
-                
-                st.session_state.chat_history.append({"role": "assistant", "content": f"✅ Applied {success_count} actions!"})
-                st.session_state.pending_tool_calls = None
-                st.rerun()
-        with c2:
-            if st.button("❌ Cancel"):
-                st.session_state.chat_history.append({"role": "assistant", "content": "🚫 Cancelled."})
-                st.session_state.pending_tool_calls = None
-                st.rerun()
-                
+        with st.container(border=True):
+            st.subheader("⚠️ Confirm Proposed Actions")
+            st.info("Review the suggested transformations. Applying will modify your data.")
+
+            # List actions in a nice format
+            for i, tc in enumerate(st.session_state.pending_tool_calls):
+                st.markdown(f"**{i+1}.** {describe_tool_call(tc)}")
+
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.empty()
+            with col2:
+                if st.button("✅ Apply Transformations", type="primary", use_container_width=True):
+                    st.session_state.df_history.append(st.session_state.cleaned_df.copy())
+                    success_count = 0
+                    for tc in st.session_state.pending_tool_calls:
+                        try:
+                            st.session_state.cleaned_df = execute_tool(
+                                st.session_state.cleaned_df,
+                                tc,
+                                st.session_state.column_types
+                            )
+                            st.session_state.executed_actions.append(tc)
+                            success_count += 1
+                        except Exception as e:
+                            st.error(f"❌ Error on '{tc['tool_name']}': {e}")
+                            break
+                    st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                    st.session_state.has_cleaning_applied = True
+                    refresh_suggestions()
+                    st.session_state.chat_history.append({"role": "assistant", "content": f"✅ Successfully applied {success_count} transformations!"})
+                    st.session_state.pending_tool_calls = None
+                    st.rerun()
+            with col3:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.chat_history.append({"role": "assistant", "content": "🚫 Actions cancelled."})
+                    st.session_state.pending_tool_calls = None
+                    st.rerun()
+
     st.divider()
-    
-    # UNDO
+
+    # Undo Section
     if st.session_state.df_history:
-        if st.button("↩️ Undo Last Batch"):
-            st.session_state.cleaned_df = st.session_state.df_history.pop()
-            # We should probably remove the executed actions corresponding to that batch.
-            # But the history tracking for executed_actions is flat. 
-            # Ideally we'd pop N actions. For now, let's just warn that history might be out of sync or implement simpler undo.
-            # Simplified: Just pop the last state.
-            st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-            refresh_suggestions()
-            st.success("Restored previous state.")
-            st.rerun()
+        with st.expander("🔄 Undo Options", expanded=False):
+            st.markdown("**Revert the last batch of changes if needed.**")
+            if st.button("↩️ Undo Last Batch", help="This restores the data to before the last applied transformations."):
+                st.session_state.cleaned_df = st.session_state.df_history.pop()
+                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                refresh_suggestions()
+                st.success("✅ Data restored to previous state.")
+                st.rerun()
 
 
 # ======================== 
@@ -509,102 +508,122 @@ if current_page == "🛠️ Manual Transform":
     cols = st.session_state.cleaned_df.columns.tolist()
 
     # Dataset-level operations
-    with st.expander("🗃️ Dataset Operations", expanded=False):
-        st.subheader("Deduplicate Rows")
-        dup_c1, dup_c2 = st.columns(2)
-        with dup_c1:
-            dup_cols = st.multiselect("Check duplicates on columns (leave empty for all)", cols, key="dup_cols")
-            keep_opt = st.selectbox("Keep", ["first", "last"], key="dup_keep")
-        with dup_c2:
-            dup_count = st.session_state.cleaned_df.duplicated(subset=dup_cols if dup_cols else None).sum()
-            st.metric("Duplicate Rows Found", dup_count)
-            if st.button("Remove Duplicates", disabled=dup_count == 0):
-                args = {"keep": keep_opt}
-                if dup_cols:
-                    args["subset"] = dup_cols
-                apply_manual_tool("deduplicate_rows", args)
-        
-        st.divider()        
-        st.subheader("Rename Column")
-        ren_c1, ren_c2 = st.columns(2)
-        with ren_c1:
-            col_to_rename = st.selectbox("Column to rename", cols, key="ren_col")
-        with ren_c2:
-            new_name = st.text_input("New name", key="ren_new")
-            if st.button("Rename"):
-                if new_name:
-                    apply_manual_tool("rename_column", {"column": col_to_rename, "new_name": new_name})
-        
-        st.divider()        
-        st.subheader("Drop Column(s)")
-        cols_to_drop = st.multiselect("Select column(s) to drop", cols, key="drop_cols")
-        if st.button("Drop Selected Columns", disabled=len(cols_to_drop) == 0):
-            if len(cols_to_drop) == 1:
-                apply_manual_tool("drop_column", {"column": cols_to_drop[0]})
-            else:
-                apply_manual_tool("drop_columns_batch", {"columns": cols_to_drop})
+    st.checkbox("Dataset Operations", key="show_dataset", value=st.session_state.get("show_dataset", False), help="Enable to show options for dataset-level operations like deduplication and column management.")
+    if st.session_state.show_dataset:
+        with st.expander("🗃️ Dataset Operations", expanded=True):
+            st.subheader("Deduplicate Rows")
+            dup_c1, dup_c2 = st.columns(2)
+            with dup_c1:
+                dup_cols = st.multiselect("Check duplicates on columns (leave empty for all)", cols, key="dup_cols")
+                keep_opt = st.selectbox("Keep", ["first", "last"], key="dup_keep")
+            with dup_c2:
+                dup_count = st.session_state.cleaned_df.duplicated(subset=dup_cols if dup_cols else None).sum()
+                st.metric("Duplicate Rows Found", dup_count)
+                if st.button("Remove Duplicates", disabled=dup_count == 0):
+                    args = {"keep": keep_opt}
+                    if dup_cols:
+                        args["subset"] = dup_cols
+                    apply_manual_tool("deduplicate_rows", args)
+            
+            st.divider()        
+            st.subheader("Rename Column")
+            ren_c1, ren_c2 = st.columns(2)
+            with ren_c1:
+                col_to_rename = st.selectbox("Column to rename", cols, key="ren_col")
+            with ren_c2:
+                new_name = st.text_input("New name", key="ren_new")
+                if st.button("Rename"):
+                    if new_name:
+                        apply_manual_tool("rename_column", {"column": col_to_rename, "new_name": new_name})
+            
+            st.divider()        
+            st.subheader("Drop Column(s)")
+            cols_to_drop = st.multiselect("Select column(s) to drop", cols, key="drop_cols")
+            if st.button("Drop Selected Columns", disabled=len(cols_to_drop) == 0):
+                if len(cols_to_drop) == 1:
+                    apply_manual_tool("drop_column", {"column": cols_to_drop[0]})
+                else:
+                    apply_manual_tool("drop_columns_batch", {"columns": cols_to_drop})
 
     # NEW: Calculated Columns
-    with st.expander("🧮 Calculated Columns"):
-        st.write("Create a new column using a formula (e.g., `Price * Quantity` or `Age + 1`).")
-        calc_c1, calc_c2 = st.columns(2)
-        with calc_c1:
-            new_col_name = st.text_input("New Column Name", key="calc_name")
-        with calc_c2:
-            formula = st.text_input("Formula (pandas eval syntax)", key="calc_formula")
-        
-        if st.button("Create Column"):
-            if new_col_name and formula:
-                apply_manual_tool("create_calculated_column", {"new_column_name": new_col_name, "formula": formula})
-
-    with st.expander("Text Operations"):
-        string_cols = [c for c in cols if st.session_state.cleaned_df[c].dtype == "object"]
-        if not string_cols:
-            st.warning("No string columns detected.")
-        else:
-            c_txt1, c_txt2, c_txt3 = st.columns(3)
-            with c_txt1:
-                col_txt = st.selectbox("String Column", string_cols, key="txt_col")
-            with c_txt2:
-                op_txt = st.selectbox("Operation", ["Trim", "Lower", "Upper", "Title", "Remove Special", "Replace Text", "Regex Replace"], key="txt_op")
-            with c_txt3:
-                if op_txt == "Trim":
-                    if st.button("Apply Trim"):
-                        apply_manual_tool("trim_spaces", {"column": col_txt})
-                elif op_txt in ["Lower", "Upper", "Title"]:
-                    if st.button(f"Apply {op_txt}"):
-                        apply_manual_tool("standardize_case", {"column": col_txt, "case": op_txt.lower()})
-                elif op_txt == "Remove Special":
-                    if st.button("Apply Remove Special"):
-                        apply_manual_tool("remove_special_chars", {"column": col_txt})
-                elif op_txt == "Replace Text":
-                    old_t = st.text_input("Old Text", key="txt_old")
-                    new_t = st.text_input("New Text", key="txt_new")
-                    if st.button("Apply Replace"):
-                        apply_manual_tool("replace_text", {"column": col_txt, "old_val": old_t, "new_val": new_t})
-                elif op_txt == "Regex Replace":
-                    pat = st.text_input("Regex Pattern", key="reg_pat")
-                    rep = st.text_input("Replacement", key="reg_rep")
-                    if st.button("Apply Regex"):
-                        apply_manual_tool("replace_text_regex", {"column": col_txt, "pattern": pat, "replacement": rep})
-
-    with st.expander("Missing Values"):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            col_missing = st.selectbox("Column", cols, key="missing_col")
-        with c2:
-            method_missing = st.selectbox("Method", ["drop_rows", "mean", "median", "mode", "zero", "ffill", "bfill", "custom"], key="missing_method")
-        with c3:
-            val_missing = None
-            if method_missing == "custom":
-                val_missing = st.text_input("Custom Value", key="missing_val")
+    st.checkbox("Calculated Columns", key="show_calculated", value=st.session_state.get("show_calculated", False), help="Enable to show options for creating new columns using formulas.")
+    if st.session_state.show_calculated:
+        with st.expander("🧮 Calculated Columns", expanded=True):
+            st.write("Create a new column using a formula (e.g., `Price * Quantity` or `Age + 1`).")
+            calc_c1, calc_c2 = st.columns(2)
+            with calc_c1:
+                new_col_name = st.text_input("New Column Name", key="calc_name")
+            with calc_c2:
+                formula = st.text_input("Formula (pandas eval syntax)", key="calc_formula")
             
+            if st.button("Create Column"):
+                if new_col_name and formula:
+                    apply_manual_tool("create_calculated_column", {"new_column_name": new_col_name, "formula": formula})
+
+    st.checkbox("Text Operations", key="show_text", value=st.session_state.get("show_text", False), help="Enable to show options for text cleaning like trimming, case conversion, and replacements.")
+    if st.session_state.show_text:
+        with st.expander("Text Operations", expanded=True):
+            string_cols = [c for c in cols if st.session_state.cleaned_df[c].dtype == "object"]
+            if not string_cols:
+                st.warning("No string columns detected.")
+            else:
+                c_txt1, c_txt2, c_txt3 = st.columns(3)
+                with c_txt1:
+                    col_txt = st.selectbox("String Column", string_cols, key="txt_col")
+                with c_txt2:
+                    op_txt = st.selectbox("Operation", ["Trim Whitespace", "Convert to Lowercase", "Convert to Uppercase", "Convert to Title Case", "Remove Special Characters", "Replace Text", "Advanced Regex Replace"], key="txt_op", help="Select the text transformation to apply to the chosen column.")
+                    with c_txt3:
+                        if op_txt == "Trim Whitespace":
+                            if st.button("Apply Trim"):
+                                apply_manual_tool("trim_spaces", {"column": col_txt})
+                        elif op_txt in ["Convert to Lowercase", "Convert to Uppercase", "Convert to Title Case"]:
+                            case_map = {"Convert to Lowercase": "lower", "Convert to Uppercase": "upper", "Convert to Title Case": "title"}
+                            if st.button(f"Apply {op_txt.split(' ')[-1]}"):
+                                apply_manual_tool("standardize_case", {"column": col_txt, "case": case_map[op_txt]})
+                        elif op_txt == "Remove Special Characters":
+                            if st.button("Apply Remove Special"):
+                                apply_manual_tool("remove_special_chars", {"column": col_txt})
+                        elif op_txt == "Replace Text":
+                            old_t = st.text_input("Old Text", key="txt_old")
+                            new_t = st.text_input("New Text", key="txt_new")
+                            if st.button("Apply Replace"):
+                                apply_manual_tool("replace_text", {"column": col_txt, "old_val": old_t, "new_val": new_t})
+                        elif op_txt == "Advanced Regex Replace":
+                            pat = st.text_input("Regex Pattern", key="reg_pat")
+                            rep = st.text_input("Replacement", key="reg_rep")
+                            if st.button("Apply Regex"):
+                                apply_manual_tool("replace_text_regex", {"column": col_txt, "pattern": pat, "replacement": rep})
+
+    st.checkbox("Missing Values", key="show_missing", value=st.session_state.get("show_missing", False), help="Enable to show options for handling missing/null values in columns.")
+    if st.session_state.show_missing:
+        with st.expander("Missing Values", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                col_missing = st.selectbox("Column", cols, key="missing_col")
+            with c2:
+                method_missing = st.selectbox("Method", ["Drop Rows with Nulls", "Fill with Mean", "Fill with Median", "Fill with Mode", "Fill with Zero", "Forward Fill", "Backward Fill", "Fill with Custom Value"], key="missing_method", help="Choose how to handle missing values in the selected column.")
+            with c3:
+                val_missing = None
+                if method_missing == "custom":
+                    val_missing = st.text_input("Custom Value", key="missing_val")
+                
+            method_map = {
+                "Drop Rows with Nulls": "drop_rows",
+                "Fill with Mean": "mean",
+                "Fill with Median": "median",
+                "Fill with Mode": "mode",
+                "Fill with Zero": "zero",
+                "Forward Fill": "ffill",
+                "Backward Fill": "bfill",
+                "Fill with Custom Value": "custom"
+            }
+            short_method = method_map.get(method_missing, method_missing)
             if st.button("Apply Fill/Drop"):
-                if method_missing == "drop_rows":
+                if short_method == "drop_rows":
                     apply_manual_tool("drop_rows_with_nulls", {"column": col_missing})
                 else:
-                    args = {"column": col_missing, "method": method_missing}
-                    if method_missing == "custom":
+                    args = {"column": col_missing, "method": short_method}
+                    if short_method == "custom":
                         # Basic type inference for custom value
                         try:
                             if val_missing.lower() == 'none': val_missing = None
@@ -615,32 +634,34 @@ if current_page == "🛠️ Manual Transform":
                         args["value"] = val_missing
                     apply_manual_tool("fill_nulls", args)
 
-    with st.expander("Numeric Operations"):
-        numeric_cols = [c for c in cols if pd.api.types.is_numeric_dtype(st.session_state.cleaned_df[c])]
-        if not numeric_cols:
-            st.warning("No numeric columns detected.")
-        else:
-            c_num1, c_num2, c_num3 = st.columns(3)
-            with c_num1:
-                col_num = st.selectbox("Numeric Column", numeric_cols, key="num_col")
-            with c_num2:
-                op_num = st.selectbox("Operation", ["Round", "Clip", "Scale", "Bin", "Remove Outliers", "Replace Negatives"], key="num_op")
-            
+    st.checkbox("Numeric Operations", key="show_numeric", value=st.session_state.get("show_numeric", False), help="Enable to show options for numeric transformations like rounding, scaling, and outlier removal.")
+    if st.session_state.show_numeric:
+        with st.expander("Numeric Operations", expanded=True):
+            numeric_cols = [c for c in cols if pd.api.types.is_numeric_dtype(st.session_state.cleaned_df[c])]
+            if not numeric_cols:
+                st.warning("No numeric columns detected.")
+            else:
+                c_num1, c_num2, c_num3 = st.columns(3)
+                with c_num1:
+                    col_num = st.selectbox("Numeric Column", numeric_cols, key="num_col")
+                with c_num2:
+                    op_num = st.selectbox("Operation", ["Round Numbers", "Clip Values", "Scale Values", "Bin Values", "Remove Outliers", "Replace Negative Values"], key="num_op", help="Select the numeric transformation to apply to the chosen column.")
+                
             with c_num3:
-                if op_num == "Round":
+                if op_num == "Round Numbers":
                     decimals = st.number_input("Decimals", 0, 10, 2, key="num_dec")
                     if st.button("Apply Round"):
                         apply_manual_tool("round_numeric", {"column": col_num, "decimals": decimals, "method": "round"})
-                elif op_num == "Clip":
+                elif op_num == "Clip Values":
                     lower = st.number_input("Lower", value=0.0, key="num_lower")
                     upper = st.number_input("Upper", value=100.0, key="num_upper")
                     if st.button("Apply Clip"):
                         apply_manual_tool("clip_numeric", {"column": col_num, "lower": lower, "upper": upper})
-                elif op_num == "Scale":
+                elif op_num == "Scale Values":
                     method_scale = st.selectbox("Method", ["minmax", "zscore"], key="scale_method")
                     if st.button("Apply Scale"):
                         apply_manual_tool("scale_numeric", {"column": col_num, "method": method_scale})
-                elif op_num == "Bin":
+                elif op_num == "Bin Values":
                     bins = st.number_input("Bins", 2, 100, 5, key="num_bins")
                     target_bin = st.text_input("New Column Name (Optional)", key="bin_target")
                     if st.button("Apply Bin"):
@@ -652,37 +673,39 @@ if current_page == "🛠️ Manual Transform":
                     action_out = st.selectbox("Action", ["null", "drop", "clip", "mean", "median"], key="out_action")
                     if st.button("Apply Outlier Removal"):
                         apply_manual_tool("remove_outliers", {"column": col_num, "method": method_out, "action": action_out})
-                elif op_num == "Replace Negatives":
+                elif op_num == "Replace Negative Values":
                     rep_val = st.number_input("Replace with", value=0.0, key="neg_val")
                     if st.button("Apply Neg Replace"):
                         apply_manual_tool("replace_negative_values", {"column": col_num, "replacement_value": rep_val})
 
 
 
-    with st.expander("Date & Type Operations"):
-        c_dt1, c_dt2, c_dt3 = st.columns(3)
-        with c_dt1:
-            col_gen = st.selectbox("Column", cols, key="gen_col")
-        with c_dt2:
-            op_gen = st.selectbox("Operation", ["Convert Type", "Date: To Datetime", "Date: Extract Part", "Date: Offset", "Date: Difference"], key="gen_op")
+    st.checkbox("Date & Type Operations", key="show_date", value=st.session_state.get("show_date", False), help="Enable to show options for date conversions, type changes, and date calculations.")
+    if st.session_state.show_date:
+        with st.expander("Date & Type Operations", expanded=True):
+            c_dt1, c_dt2, c_dt3 = st.columns(3)
+            with c_dt1:
+                col_gen = st.selectbox("Column", cols, key="gen_col")
+            with c_dt2:
+                op_gen = st.selectbox("Operation", ["Convert Column Type", "Convert to Datetime", "Extract Date Part", "Offset Date", "Calculate Date Difference"], key="gen_op", help="Select the date or type conversion operation to apply.")
         with c_dt3:
-            if op_gen == "Convert Type":
+            if op_gen == "Convert Column Type":
                 target_type = st.selectbox("Target Type", ["numeric", "string", "datetime", "boolean", "categorical"], key="target_type")
                 if st.button("Apply Convert"):
                     apply_manual_tool("convert_column_type", {"column": col_gen, "target_type": target_type})
-            elif op_gen == "Date: To Datetime":
+            elif op_gen == "Convert to Datetime":
                 fmt = st.text_input("Format (optional)", key="date_fmt")
                 if st.button("Convert to Datetime"):
                     args = {"column": col_gen}
                     if fmt: args["format"] = fmt
                     apply_manual_tool("convert_to_datetime", args)
-            elif op_gen == "Date: Extract Part":
+            elif op_gen == "Extract Date Part":
                 part = st.selectbox("Part", ["year", "month", "day", "weekday", "quarter"], key="date_part")
                 new_col_name_sugg = f"{col_gen}_{part}"
                 target_col = st.text_input("New Column Name", value=new_col_name_sugg, key="date_extract_target")
                 if st.button("Extract"):
                     apply_manual_tool("extract_date_part", {"column": col_gen, "part": part, "new_column": target_col})
-            elif op_gen == "Date: Offset":
+            elif op_gen == "Offset Date":
                 val = st.number_input("Value", value=1, key="offset_val")
                 unit = st.selectbox("Unit", ["days", "weeks", "months", "years"], key="offset_unit")
                 target_off = st.text_input("New Column Name (Optional)", key="offset_target")
@@ -690,7 +713,7 @@ if current_page == "🛠️ Manual Transform":
                     args = {"column": col_gen, "value": int(val), "unit": unit}
                     if target_off: args["new_column"] = target_off
                     apply_manual_tool("offset_date", args)
-            elif op_gen == "Date: Difference":
+            elif op_gen == "Calculate Date Difference":
                 ref = st.text_input("Reference Date (YYYY-MM-DD or 'today')", value="today", key="diff_ref")
                 unit = st.selectbox("Unit", ["days", "weeks", "hours", "years"], key="diff_unit")
                 target_diff = st.text_input("New Column Name (Optional)", key="diff_target")
@@ -699,7 +722,18 @@ if current_page == "🛠️ Manual Transform":
                      if target_diff: args["new_column"] = target_diff
                      apply_manual_tool("date_difference", args)
 
-# ======================== 
+    # Undo Section
+    if st.session_state.df_history:
+        with st.expander("🔄 Undo Options", expanded=False):
+            st.markdown("**Revert the last batch of changes if needed.**")
+            if st.button("↩️ Undo Last Batch", help="This restores the data to before the last applied transformations."):
+                st.session_state.cleaned_df = st.session_state.df_history.pop()
+                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                refresh_suggestions()
+                st.success("✅ Data restored to previous state.")
+                st.rerun()
+
+# ========================
 # PAGE 4: AI SUGGESTIONS
 # ======================== 
 if current_page == "🔮 AI Suggestions":
@@ -833,7 +867,7 @@ if current_page == "📜 History & Code":
         st.download_button(
             "📥 Download Script",
             data=script.encode('utf-8'),
-            file_name="cleaning_script.py",
+            file_name="cleaning_script.txt",
             mime="text/plain"
         )
     else:
