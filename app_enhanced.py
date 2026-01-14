@@ -293,6 +293,8 @@ if current_page == "🕵️ Data Inspector":
         st.dataframe(st.session_state.original_df.head(50), use_container_width=True)
         _, orig_summary, orig_health = run_quality_checks(st.session_state.original_df)
         st.metric("Health Score (Original)", orig_health["score"], orig_health["status"])
+        st.caption("Issues Found:")
+        st.dataframe(orig_summary, use_container_width=True)
     
     with col2:
         st.subheader("Current Cleaned Data")
@@ -302,6 +304,8 @@ if current_page == "🕵️ Data Inspector":
             
             delta = round(clean_health["score"] - orig_health["score"], 2)
             st.metric("Health Score (Cleaned)", clean_health["score"], delta=delta)
+            st.caption("Issues Found:")
+            st.dataframe(clean_summary, use_container_width=True)
         else:
             st.info("Apply transformations to see results here.")
 
