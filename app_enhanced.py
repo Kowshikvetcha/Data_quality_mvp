@@ -56,7 +56,8 @@ for key in [
     "executed_actions",
     "last_notification",
     "suggestions",
-    "preview_result"
+    "preview_result",
+    "extra_datasets"
 ]:
     if key not in st.session_state:
         st.session_state[key] = None
@@ -71,6 +72,8 @@ if st.session_state.executed_actions is None:
     st.session_state.executed_actions = []
 if st.session_state.suggestions is None:
     st.session_state.suggestions = []
+if st.session_state.extra_datasets is None:
+    st.session_state.extra_datasets = {}
 
 
 # ------------------------
@@ -119,6 +122,7 @@ with st.sidebar:
             "🕵️ Data Inspector", 
             "💬 Chat & Transform", 
             "🛠️ Manual Transform",
+            "🔗 Join Datasets",
             "🔮 AI Suggestions",
             "📤 Export",
             "📜 History & Code"
@@ -143,10 +147,39 @@ with st.sidebar:
             st.session_state.cleaned_df = df.copy()
             st.session_state.column_types = infer_all_column_types(df)
             refresh_suggestions()
-            st.success("Loaded!")
+            st.success("Loaded Main Dataset!")
             st.rerun()
         except Exception as e:
             st.error(f"Failed to load file: {e}")
+
+    # Additional Datasets Uploader
+    st.markdown("### ➕ Additional Datasets")
+    st.caption("Upload other files to join with the main dataset.")
+    add_files = st.file_uploader("Upload Extra Files", type=["csv", "xlsx", "parquet"], accept_multiple_files=True, key="extra_uploader")
+    
+    if add_files:
+        for f in add_files:
+            if f.name not in st.session_state.extra_datasets:
+                try:
+                    if f.name.endswith('.csv'):
+                        extra_df = pd.read_csv(f)
+                    elif f.name.endswith('.xlsx'):
+                        extra_df = pd.read_excel(f)
+                    elif f.name.endswith('.parquet'):
+                        extra_df = pd.read_parquet(f)
+                    else:
+                        continue
+                    
+                    st.session_state.extra_datasets[f.name] = extra_df
+                    st.success(f"Loaded '{f.name}'")
+                except Exception as e:
+                    st.error(f"Failed to load '{f.name}': {e}")
+
+    if st.session_state.extra_datasets:
+        st.write(f"**Loaded Extras:** {len(st.session_state.extra_datasets)}")
+        with st.expander("View Extras"):
+            for name, d in st.session_state.extra_datasets.items():
+                st.write(f"- {name} ({d.shape[0]}x{d.shape[1]})")
 
     if st.session_state.original_df is not None:
         st.divider()
@@ -254,6 +287,18 @@ if st.session_state.last_notification:
     st.session_state.last_notification = None
 
 
+
+# ------------------------
+# Helper: Undo Last Action
+# ------------------------
+def undo_last_action():
+    if st.session_state.df_history:
+        st.session_state.cleaned_df = st.session_state.df_history.pop()
+        st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+        refresh_suggestions()
+        st.session_state.last_notification = {"type": "success", "text": "✅ Undo successful! Verified reversion to previous state."}
+        st.rerun()
+
 # ------------------------
 # Helper: Apply tool
 # ------------------------
@@ -284,7 +329,14 @@ def apply_manual_tool(tool_name, arguments):
 # PAGE 1: INSPECTOR
 # ======================== 
 if current_page == "🕵️ Data Inspector":
-    st.header("🔎 Data Inspector")
+    # Header Area with Undo Button
+    h_col1, h_col2 = st.columns([3, 1])
+    with h_col1:
+        st.header("🔎 Data Inspector")
+    with h_col2:
+        if st.session_state.df_history:
+            if st.button("↩️ Undo Last Change", key="undo_inspector", help="Revert the last transformation"):
+                undo_last_action()
     
     col1, col2 = st.columns(2)
     
@@ -298,6 +350,7 @@ if current_page == "🕵️ Data Inspector":
     
     with col2:
         st.subheader("Current Cleaned Data")
+
         if st.session_state.has_cleaning_applied:
             st.dataframe(st.session_state.cleaned_df.head(50), use_container_width=True)
             _, clean_summary, clean_health = run_quality_checks(st.session_state.cleaned_df)
@@ -494,12 +547,8 @@ if current_page == "💬 Chat & Transform":
     if st.session_state.df_history:
         with st.expander("🔄 Undo Options", expanded=False):
             st.markdown("**Revert the last batch of changes if needed.**")
-            if st.button("↩️ Undo Last Batch", help="This restores the data to before the last applied transformations."):
-                st.session_state.cleaned_df = st.session_state.df_history.pop()
-                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-                refresh_suggestions()
-                st.success("✅ Data restored to previous state.")
-                st.rerun()
+            if st.button("↩️ Undo Last Batch", help="This restores the data to before the last applied transformations.", key="undo_chat"):
+                undo_last_action()
 
 
 # ======================== 
@@ -730,15 +779,102 @@ if current_page == "🛠️ Manual Transform":
     if st.session_state.df_history:
         with st.expander("🔄 Undo Options", expanded=False):
             st.markdown("**Revert the last batch of changes if needed.**")
-            if st.button("↩️ Undo Last Batch", help="This restores the data to before the last applied transformations."):
-                st.session_state.cleaned_df = st.session_state.df_history.pop()
-                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-                refresh_suggestions()
-                st.success("✅ Data restored to previous state.")
-                st.rerun()
+            if st.button("↩️ Undo Last Batch", help="This restores the data to before the last applied transformations.", key="undo_manual"):
+                undo_last_action()
+
+# ======================== 
+# PAGE 4: JOIN DATASETS
+# ======================== 
+if current_page == "🔗 Join Datasets":
+    st.header("🔗 Join Datasets")
+    st.markdown("Combine your current dataset with another uploaded file.")
+    
+    if not st.session_state.extra_datasets:
+        st.warning("⚠️ No additional datasets found. Please upload extra files in the sidebar first.")
+    else:
+        # 1. Select Datasets
+        col_j1, col_j2, col_j3 = st.columns([2, 0.5, 2])
+        
+        with col_j1:
+            st.subheader("Left Dataset (Main)")
+            st.write(f"Rows: {st.session_state.cleaned_df.shape[0]}, Cols: {st.session_state.cleaned_df.shape[1]}")
+            st.dataframe(st.session_state.cleaned_df.head(3), use_container_width=True)
+            left_cols = st.session_state.cleaned_df.columns.tolist()
+            
+        with col_j2:
+            st.markdown("<h2 style='text-align: center; vertical-align: middle; line-height: 200px;'>+</h2>", unsafe_allow_html=True)
+
+        with col_j3:
+            st.subheader("Right Dataset")
+            right_name = st.selectbox("Select Dataset", list(st.session_state.extra_datasets.keys()), key="join_right_name")
+            right_df = st.session_state.extra_datasets[right_name]
+            st.write(f"Rows: {right_df.shape[0]}, Cols: {right_df.shape[1]}")
+            st.dataframe(right_df.head(3), use_container_width=True)
+            right_cols = right_df.columns.tolist()
+
+        st.divider()
+
+        # 2. Configure Join
+        st.subheader("⚙️ Configure Join")
+        
+        c_conf1, c_conf2, c_conf3 = st.columns(3)
+        
+        with c_conf1:
+            join_how = st.selectbox("Join Type", ["inner", "left", "right", "outer"], key="join_how", help="Inner: Match both. Left: Keep all left. Right: Keep all right. Outer: Keep all.")
+            
+        with c_conf2:
+            left_on = st.multiselect("Left Key(s)", left_cols, key="join_left_on")
+            
+        with c_conf3:
+            right_on = st.multiselect("Right Key(s)", right_cols, key="join_right_on")
+            
+        # 3. Preview & Apply
+        valid_config = left_on and right_on and len(left_on) == len(right_on)
+        
+        if valid_config:
+            if st.button("🔍 Preview Join"):
+                try:
+                    from core.cleaning import join_datasets
+                    preview_df = join_datasets(st.session_state.cleaned_df, right_df, left_on, right_on, join_how)
+                    st.session_state.preview_result = preview_df
+                    st.success(f"Preview Successful! Resulting shape: {preview_df.shape}")
+                except Exception as e:
+                    st.error(f"Join failed: {e}")
+                    
+            if st.session_state.preview_result is not None:
+                st.subheader("Preview Result")
+                st.dataframe(st.session_state.preview_result.head(10), use_container_width=True)
+                
+                if st.button("🚀 Apply & Set as Main Dataset", type="primary"):
+                    # Save current state to undo history first
+                    st.session_state.df_history.append(st.session_state.cleaned_df.copy())
+                    
+                    # Apply
+                    st.session_state.cleaned_df = st.session_state.preview_result.copy()
+                    # Also update original_df to this new base?
+                    # Usually "Original" means the raw file. But if we join, that becomes the new baseline for cleaning.
+                    # Let's update cleaned_df essentially acting as a major transform.
+                    st.session_state.original_df = st.session_state.preview_result.copy()
+                    
+                    # Re-infer types
+                    st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                    st.session_state.has_cleaning_applied = True
+                    st.session_state.preview_result = None # Clear preview
+                    refresh_suggestions()
+                    
+                    st.success("✅ Datasets joined successfully! You can now clean the merged dataset.")
+                    st.session_state.executed_actions.append({
+                        "tool_name": "join_datasets",
+                        "arguments": {"right_dataset": right_name, "how": join_how, "on": str(left_on)}
+                    })
+                    st.rerun()
+        else:
+            if not valid_config:
+                st.info("Select matching keys from both datasets to proceed.")
+
 
 # ========================
-# PAGE 4: AI SUGGESTIONS
+# PAGE 5: AI SUGGESTIONS
 # ======================== 
 if current_page == "🔮 AI Suggestions":
     st.header("🔮 AI Suggestions")

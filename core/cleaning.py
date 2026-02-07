@@ -720,4 +720,47 @@ def create_calculated_column(df: pd.DataFrame, new_column_name: str, formula: st
     except Exception as e:
         raise ValueError(f"Failed to evaluate formula '{formula}': {e}")
     return df
+    
+    
+# -------------------------
+# Multi-Dataset Operations
+# -------------------------
+def join_datasets(
+    df_left: pd.DataFrame, 
+    df_right: pd.DataFrame, 
+    left_on: List[str], 
+    right_on: List[str], 
+    how: str = 'inner'
+) -> pd.DataFrame:
+    """
+    Join two datasets on specified keys.
+    
+    Args:
+        df_left: Left DataFrame
+        df_right: Right DataFrame
+        left_on: List of column names in left DataFrame to join on
+        right_on: List of column names in right DataFrame to join on
+        how: Type of join ('inner', 'left', 'right', 'outer')
+    """
+    # Validation
+    for col in left_on:
+        if col not in df_left.columns:
+            raise ValueError(f"Column '{col}' not found in left dataset")
+    for col in right_on:
+        if col not in df_right.columns:
+            raise ValueError(f"Column '{col}' not found in right dataset")
+            
+    if len(left_on) != len(right_on):
+        raise ValueError("Number of join keys must match")
+        
+    # Perform merge
+    # suffixes default to ('_x', '_y') but let's make them more descriptive if needed
+    # for now default is fine
+    return pd.merge(
+        df_left, 
+        df_right, 
+        left_on=left_on, 
+        right_on=right_on, 
+        how=how
+    )
 
