@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import List, Union, Optional
 
 
 def fill_nulls(df: pd.DataFrame, column: str, method: str, value: any = None) -> pd.DataFrame:
@@ -131,17 +132,11 @@ def apply_math(df: pd.DataFrame, column: str, operation: str) -> pd.DataFrame:
     return df
 
 
-def bin_numeric(df: pd.DataFrame, column: str, bins: int, labels: list = None) -> pd.DataFrame:
+def bin_numeric(df: pd.DataFrame, column: str, bins: int, labels: list = None, new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
-    # If labels are not provided, we can let pandas generate range labels, but they are not JSON serializable easily unless converted to str.
-    # For tool usage, creating a new column might be better, but the rule says transformations work on the dataframe. 
-    # Usually binning creates a NEW CATEGORICAL column. 
-    # Let's overwrite or create a new column suffixed with _binned? 
-    # The requirement implicitly assumes "in-place" style transformation on the dataset, but usually binning changes type.
-    # For now, let's create a new column '{column}_binned' to be safe, or overwrite if the user intends to categorize.
-    # To keep it simple and consistent with other functions returning df, we will overwrite the column with categorical data (converted to string for safety).
     
-    df[column] = pd.cut(df[column], bins=bins, labels=labels).astype(str)
+    target_col = new_column if new_column else column
+    df[target_col] = pd.cut(df[column], bins=bins, labels=labels).astype(str)
     return df
 
 
@@ -307,51 +302,55 @@ def convert_to_datetime(df: pd.DataFrame, column: str, format: str = None) -> pd
     return df
 
 
-def extract_date_part(df: pd.DataFrame, column: str, part: str) -> pd.DataFrame:
+def extract_date_part(df: pd.DataFrame, column: str, part: str, new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
-    # Ensure column is datetime
-    if not pd.api.types.is_datetime64_any_dtype(df[column]):
-        df[column] = pd.to_datetime(df[column], errors='coerce')
+    # Ensure column is datetime (source)
+    temp_series = df[column]
+    if not pd.api.types.is_datetime64_any_dtype(temp_series):
+        temp_series = pd.to_datetime(temp_series, errors='coerce')
+    
+    target_col = new_column if new_column else column
     
     if part == 'year':
-        df[column] = df[column].dt.year
+        df[target_col] = temp_series.dt.year
     elif part == 'month':
-        df[column] = df[column].dt.month
+        df[target_col] = temp_series.dt.month
     elif part == 'day':
-        df[column] = df[column].dt.day
+        df[target_col] = temp_series.dt.day
     elif part == 'weekday':
-        df[column] = df[column].dt.day_name()
+        df[target_col] = temp_series.dt.day_name()
     elif part == 'quarter':
-        df[column] = df[column].dt.quarter
+        df[target_col] = temp_series.dt.quarter
     else:
         raise ValueError(f"Unsupported date part: {part}")
         
-    # Convert NaNs to nullable int if possible or keep as float/object
     return df
 
 
-def offset_date(df: pd.DataFrame, column: str, value: int, unit: str) -> pd.DataFrame:
+def offset_date(df: pd.DataFrame, column: str, value: int, unit: str, new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
     if not pd.api.types.is_datetime64_any_dtype(df[column]):
         df[column] = pd.to_datetime(df[column], errors='coerce')
 
+    target_col = new_column if new_column else column
+
     if unit == 'days':
-        df[column] = df[column] + pd.Timedelta(days=value)
+        df[target_col] = df[column] + pd.Timedelta(days=value)
     elif unit == 'weeks':
-        df[column] = df[column] + pd.Timedelta(weeks=value)
+        df[target_col] = df[column] + pd.Timedelta(weeks=value)
     elif unit == 'months':
         from pandas.tseries.offsets import DateOffset
-        df[column] = df[column] + DateOffset(months=value)
+        df[target_col] = df[column] + DateOffset(months=value)
     elif unit == 'years':
         from pandas.tseries.offsets import DateOffset
-        df[column] = df[column] + DateOffset(years=value)
+        df[target_col] = df[column] + DateOffset(years=value)
     else:
         raise ValueError(f"Unsupported time unit: {unit}")
         
     return df
 
 
-def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today', unit: str = 'days') -> pd.DataFrame:
+def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today', unit: str = 'days', new_column: Optional[str] = None) -> pd.DataFrame:
     df = df.copy()
     if not pd.api.types.is_datetime64_any_dtype(df[column]):
         df[column] = pd.to_datetime(df[column], errors='coerce')
@@ -363,14 +362,16 @@ def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today'
         
     diff = ref - df[column]
     
+    target_col = new_column if new_column else column
+
     if unit == 'days':
-        df[column] = diff.dt.days
+        df[target_col] = diff.dt.days
     elif unit == 'weeks':
-        df[column] = diff.dt.days / 7
+        df[target_col] = diff.dt.days / 7
     elif unit == 'hours':
-        df[column] = diff.dt.total_seconds() / 3600
+        df[target_col] = diff.dt.total_seconds() / 3600
     elif unit == 'years':
-        df[column] = diff.dt.days / 365.25 # approx
+        df[target_col] = diff.dt.days / 365.25 # approx
     else:
         raise ValueError(f"Unsupported unit for difference: {unit}")
         
@@ -416,3 +417,350 @@ def convert_column_type(df: pd.DataFrame, column: str, target_type: str) -> pd.D
         raise ValueError(f"Unsupported target type: {target_type}")
 
     return df
+
+
+# -------------------------
+# Dataset-level Operations
+# -------------------------
+def deduplicate_rows(
+    df: pd.DataFrame, 
+    subset: Optional[List[str]] = None, 
+    keep: str = 'first'
+) -> pd.DataFrame:
+    """
+    Remove duplicate rows from the DataFrame.
+    
+    Args:
+        df: Input DataFrame
+        subset: Optional list of columns to consider for duplicates. If None, uses all columns.
+        keep: 'first', 'last', or False. Which duplicate to keep.
+    """
+    df = df.copy()
+    return df.drop_duplicates(subset=subset, keep=keep)
+
+
+def drop_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """
+    Drop a column from the DataFrame.
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in DataFrame")
+    return df.drop(columns=[column])
+
+
+def rename_column(df: pd.DataFrame, column: str, new_name: str) -> pd.DataFrame:
+    """
+    Rename a column in the DataFrame.
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in DataFrame")
+    if new_name in df.columns:
+        raise ValueError(f"Column '{new_name}' already exists in DataFrame")
+    return df.rename(columns={column: new_name})
+
+
+def reorder_columns(df: pd.DataFrame, column_order: List[str]) -> pd.DataFrame:
+    """
+    Reorder columns in the DataFrame.
+    
+    Args:
+        df: Input DataFrame
+        column_order: List of column names in desired order
+    """
+    df = df.copy()
+    # Add any missing columns at the end
+    remaining = [c for c in df.columns if c not in column_order]
+    return df[column_order + remaining]
+
+
+# -------------------------
+# Column Split/Merge Operations
+# -------------------------
+def split_column(
+    df: pd.DataFrame, 
+    column: str, 
+    delimiter: str, 
+    new_columns: List[str],
+    keep_original: bool = False
+) -> pd.DataFrame:
+    """
+    Split a column by delimiter into multiple new columns.
+    
+    Args:
+        df: Input DataFrame
+        column: Column to split
+        delimiter: String to split on
+        new_columns: Names for the resulting columns
+        keep_original: Whether to keep the original column
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in DataFrame")
+    
+    # Split the column
+    split_result = df[column].astype(str).str.split(delimiter, expand=True)
+    
+    # Assign new column names (handle fewer splits than expected columns)
+    for i, new_col in enumerate(new_columns):
+        if i < split_result.shape[1]:
+            df[new_col] = split_result[i].str.strip()
+            # Convert empty strings to None
+            df.loc[df[new_col] == '', new_col] = None
+        else:
+            df[new_col] = None
+    
+    # Drop original if requested
+    if not keep_original:
+        df = df.drop(columns=[column])
+    
+    return df
+
+
+def merge_columns(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    separator: str, 
+    new_column: str,
+    drop_original: bool = True
+) -> pd.DataFrame:
+    """
+    Merge multiple columns into a new column.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to merge
+        separator: String to use between values
+        new_column: Name for the merged column
+        drop_original: Whether to drop the original columns
+    """
+    df = df.copy()
+    
+    for col in columns:
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in DataFrame")
+    
+    # Merge columns, handling nulls
+    df[new_column] = df[columns].apply(
+        lambda row: separator.join([str(v) for v in row if pd.notna(v)]),
+        axis=1
+    )
+    
+    # Convert empty strings to None
+    df.loc[df[new_column] == '', new_column] = None
+    
+    if drop_original:
+        df = df.drop(columns=columns)
+    
+    return df
+
+
+# -------------------------
+# Batch Operations (Multi-column)
+# -------------------------
+def fill_nulls_batch(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    method: str, 
+    value: any = None
+) -> pd.DataFrame:
+    """
+    Fill nulls in multiple columns using the same method.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to fill
+        method: Fill method ('mean', 'median', 'mode', 'zero', 'ffill', 'bfill', 'custom')
+        value: Custom value (required if method is 'custom')
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+            
+        if method == "mean":
+            if pd.api.types.is_numeric_dtype(df[column]):
+                df[column] = df[column].fillna(df[column].mean())
+        elif method == "median":
+            if pd.api.types.is_numeric_dtype(df[column]):
+                df[column] = df[column].fillna(df[column].median())
+        elif method == "mode":
+            mode_val = df[column].mode()
+            if len(mode_val) > 0:
+                df[column] = df[column].fillna(mode_val.iloc[0])
+        elif method == "zero":
+            df[column] = df[column].fillna(0)
+        elif method == "ffill":
+            df[column] = df[column].ffill()
+        elif method == "bfill":
+            df[column] = df[column].bfill()
+        elif method == "custom" and value is not None:
+            df[column] = df[column].fillna(value)
+    
+    return df
+
+
+def trim_spaces_batch(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """
+    Trim leading and trailing spaces from multiple string columns.
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+        if df[column].dtype == 'object':
+            mask = df[column].notna()
+            df.loc[mask, column] = df.loc[mask, column].astype(str).str.strip()
+            df.loc[df[column] == '', column] = None
+    
+    return df
+
+
+def standardize_case_batch(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    case: str
+) -> pd.DataFrame:
+    """
+    Standardize case for multiple string columns.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to standardize
+        case: 'lower', 'upper', or 'title'
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+        if df[column].dtype == 'object':
+            mask = df[column].notna()
+            if case == "lower":
+                df.loc[mask, column] = df.loc[mask, column].astype(str).str.lower()
+            elif case == "upper":
+                df.loc[mask, column] = df.loc[mask, column].astype(str).str.upper()
+            elif case == "title":
+                df.loc[mask, column] = df.loc[mask, column].astype(str).str.title()
+    
+    return df
+
+
+def drop_columns_batch(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """
+    Drop multiple columns from the DataFrame.
+    """
+    df = df.copy()
+    existing_cols = [c for c in columns if c in df.columns]
+    return df.drop(columns=existing_cols)
+
+
+def convert_columns_batch(
+    df: pd.DataFrame, 
+    columns: List[str], 
+    target_type: str
+) -> pd.DataFrame:
+    """
+    Convert multiple columns to a target type.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to convert
+        target_type: 'numeric', 'string', 'datetime'
+    """
+    df = df.copy()
+    
+    for column in columns:
+        if column not in df.columns:
+            continue
+            
+        if target_type == "numeric":
+            df[column] = pd.to_numeric(df[column], errors='coerce')
+        elif target_type == "string":
+            mask = df[column].notna()
+            df.loc[mask, column] = df.loc[mask, column].astype(str)
+        elif target_type == "datetime":
+            df[column] = pd.to_datetime(df[column], errors='coerce')
+    
+    return df
+
+
+def replace_text_regex(df: pd.DataFrame, column: str, pattern: str, replacement: str) -> pd.DataFrame:
+    """
+    Replace text using regex pattern.
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found")
+        
+    mask = df[column].notna()
+    # Use regex=True
+    df.loc[mask, column] = df.loc[mask, column].astype(str).str.replace(pattern, replacement, regex=True)
+    # Convert empty strings to None
+    df.loc[df[column] == '', column] = None
+    return df
+
+
+def create_calculated_column(df: pd.DataFrame, new_column_name: str, formula: str) -> pd.DataFrame:
+    """
+    Create a new column using a formula (e.g., 'colA + colB' or 'colA * 2').
+    Uses pd.eval for evaluation.
+    """
+    df = df.copy()
+    if new_column_name in df.columns:
+         raise ValueError(f"Column '{new_column_name}' already exists")
+         
+    try:
+        # pd.eval can handle simple arithmetic and column references
+        # We perform it on the dataframe context
+        df[new_column_name] = df.eval(formula)
+    except Exception as e:
+        raise ValueError(f"Failed to evaluate formula '{formula}': {e}")
+    return df
+    
+    
+# -------------------------
+# Multi-Dataset Operations
+# -------------------------
+def join_datasets(
+    df_left: pd.DataFrame, 
+    df_right: pd.DataFrame, 
+    left_on: List[str], 
+    right_on: List[str], 
+    how: str = 'inner'
+) -> pd.DataFrame:
+    """
+    Join two datasets on specified keys.
+    
+    Args:
+        df_left: Left DataFrame
+        df_right: Right DataFrame
+        left_on: List of column names in left DataFrame to join on
+        right_on: List of column names in right DataFrame to join on
+        how: Type of join ('inner', 'left', 'right', 'outer')
+    """
+    # Validation
+    for col in left_on:
+        if col not in df_left.columns:
+            raise ValueError(f"Column '{col}' not found in left dataset")
+    for col in right_on:
+        if col not in df_right.columns:
+            raise ValueError(f"Column '{col}' not found in right dataset")
+            
+    if len(left_on) != len(right_on):
+        raise ValueError("Number of join keys must match")
+        
+    # Perform merge
+    # suffixes default to ('_x', '_y') but let's make them more descriptive if needed
+    # for now default is fine
+    return pd.merge(
+        df_left, 
+        df_right, 
+        left_on=left_on, 
+        right_on=right_on, 
+        how=how
+    )
+

@@ -175,7 +175,8 @@ CLEANING_TOOLS = [
                 "type": "object",
                 "properties": {
                     "column": {"type": "string"},
-                    "bins": {"type": "integer"}
+                    "bins": {"type": "integer"},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column", "bins"]
             }
@@ -212,6 +213,37 @@ CLEANING_TOOLS = [
                     "new_val": {"type": "string"}
                 },
                 "required": ["column", "old_val", "new_val"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_text_regex",
+            "description": "Replace text using a regex pattern",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "pattern": {"type": "string", "description": "Regex pattern to match"},
+                    "replacement": {"type": "string", "description": "Replacement text"}
+                },
+                "required": ["column", "pattern", "replacement"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_calculated_column",
+            "description": "Create a new column based on a formula using other columns (e.g., 'Price * Quantity')",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "new_column_name": {"type": "string"},
+                    "formula": {"type": "string", "description": "Pandas eval string (e.g., 'colA + colB')"}
+                },
+                "required": ["new_column_name", "formula"]
             }
         }
     },
@@ -297,12 +329,13 @@ CLEANING_TOOLS = [
         "type": "function",
         "function": {
             "name": "extract_date_part",
-            "description": "Extract a specific part of a date (e.g. year, month, day)",
+            "description": "Extract a specific part of a date (e.g. year, month, day) into a new or existing column",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "column": {"type": "string"},
-                    "part": {"type": "string", "enum": ["year", "month", "day", "weekday", "quarter"]}
+                    "column": {"type": "string", "description": "Source date column"},
+                    "part": {"type": "string", "enum": ["year", "month", "day", "weekday", "quarter"]},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column", "part"]
             }
@@ -318,7 +351,8 @@ CLEANING_TOOLS = [
                 "properties": {
                     "column": {"type": "string"},
                     "value": {"type": "integer", "description": "Amount to offset (can be negative)"},
-                    "unit": {"type": "string", "enum": ["days", "weeks", "months", "years"]}
+                    "unit": {"type": "string", "enum": ["days", "weeks", "months", "years"]},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column", "value", "unit"]
             }
@@ -334,7 +368,8 @@ CLEANING_TOOLS = [
                 "properties": {
                     "column": {"type": "string"},
                     "reference_date": {"type": "string", "description": "'today' or 'now', or specific date 'YYYY-MM-DD'"},
-                    "unit": {"type": "string", "enum": ["days", "weeks", "hours", "years"]}
+                    "unit": {"type": "string", "enum": ["days", "weeks", "hours", "years"]},
+                    "new_column": {"type": "string", "description": "Optional name for the new column. If omitted, overwrites original."}
                 },
                 "required": ["column"]
             }
@@ -357,5 +392,196 @@ CLEANING_TOOLS = [
                 "required": ["column", "target_type"]
             }
         }
+    },
+    # -------------------------
+    # Dataset-level Operations
+    # -------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "deduplicate_rows",
+            "description": "Remove duplicate rows from the dataset",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subset": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of columns to consider for duplicates. If not provided, uses all columns."
+                    },
+                    "keep": {
+                        "type": "string",
+                        "enum": ["first", "last"],
+                        "description": "Which duplicate to keep. Default 'first'."
+                    }
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drop_column",
+            "description": "Remove a column from the dataset",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"}
+                },
+                "required": ["column"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename_column",
+            "description": "Rename a column in the dataset",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "description": "Current column name"},
+                    "new_name": {"type": "string", "description": "New column name"}
+                },
+                "required": ["column", "new_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "split_column",
+            "description": "Split a column by delimiter into multiple new columns",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "description": "Column to split"},
+                    "delimiter": {"type": "string", "description": "String to split on (e.g., ',', ' ', '-')"},
+                    "new_columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Names for the resulting columns"
+                    },
+                    "keep_original": {
+                        "type": "boolean",
+                        "description": "Whether to keep the original column. Default false."
+                    }
+                },
+                "required": ["column", "delimiter", "new_columns"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "merge_columns",
+            "description": "Merge multiple columns into a new column",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to merge"
+                    },
+                    "separator": {"type": "string", "description": "String to use between values (e.g., ' ', ', ')"},
+                    "new_column": {"type": "string", "description": "Name for the merged column"},
+                    "drop_original": {
+                        "type": "boolean",
+                        "description": "Whether to drop the original columns. Default true."
+                    }
+                },
+                "required": ["columns", "separator", "new_column"]
+            }
+        }
+    },
+    # -------------------------
+    # Batch Operations
+    # -------------------------
+    {
+        "type": "function",
+        "function": {
+            "name": "fill_nulls_batch",
+            "description": "Fill missing values in multiple columns at once using the same method",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to fill"
+                    },
+                    "method": {
+                        "type": "string",
+                        "enum": ["mean", "median", "mode", "zero", "ffill", "bfill", "custom"]
+                    },
+                    "value": {
+                        "type": ["string", "number", "boolean", "null"],
+                        "description": "Custom value to fill nulls with (required if method is 'custom')"
+                    }
+                },
+                "required": ["columns", "method"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trim_spaces_batch",
+            "description": "Trim leading and trailing spaces from multiple string columns at once",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to trim. Use 'all' to trim all string columns."
+                    }
+                },
+                "required": ["columns"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "standardize_case_batch",
+            "description": "Standardize text casing in multiple string columns at once",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to standardize"
+                    },
+                    "case": {
+                        "type": "string",
+                        "enum": ["lower", "upper", "title"]
+                    }
+                },
+                "required": ["columns", "case"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drop_columns_batch",
+            "description": "Remove multiple columns from the dataset at once",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of columns to drop"
+                    }
+                },
+                "required": ["columns"]
+            }
+        }
     }
 ]
+
