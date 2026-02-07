@@ -515,8 +515,11 @@ if current_page == "💬 Chat & Transform":
                 st.empty()
             with col2:
                 if st.button("✅ Apply Transformations", type="primary", use_container_width=True):
-                    st.session_state.df_history.append(st.session_state.cleaned_df.copy())
+                    pre_batch_df = st.session_state.cleaned_df.copy()
                     success_count = 0
+                    executed_actions_batch = []
+                    failed_tool = None
+                    error_message = None
                     for tc in st.session_state.pending_tool_calls:
                         try:
                             st.session_state.cleaned_df = execute_tool(
@@ -524,17 +527,25 @@ if current_page == "💬 Chat & Transform":
                                 tc,
                                 st.session_state.column_types
                             )
-                            st.session_state.executed_actions.append(tc)
+                            executed_actions_batch.append(tc)
                             success_count += 1
                         except Exception as e:
-                            st.error(f"❌ Error on '{tc['tool_name']}': {e}")
+                            failed_tool = tc.get("tool_name", "tool")
+                            error_message = str(e)
                             break
-                    st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-                    st.session_state.has_cleaning_applied = True
-                    refresh_suggestions()
-                    st.session_state.chat_history.append({"role": "assistant", "content": f"✅ Successfully applied {success_count} transformations!"})
-                    st.session_state.pending_tool_calls = None
-                    st.rerun()
+                    if failed_tool:
+                        st.session_state.cleaned_df = pre_batch_df
+                        st.session_state.column_types = infer_all_column_types(pre_batch_df)
+                        st.error(f"❌ Error on '{failed_tool}': {error_message}")
+                    else:
+                        st.session_state.df_history.append(pre_batch_df)
+                        st.session_state.executed_actions.extend(executed_actions_batch)
+                        st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                        st.session_state.has_cleaning_applied = True
+                        refresh_suggestions()
+                        st.session_state.chat_history.append({"role": "assistant", "content": f"✅ Successfully applied {success_count} transformations!"})
+                        st.session_state.pending_tool_calls = None
+                        st.rerun()
             with col3:
                 if st.button("❌ Cancel", use_container_width=True):
                     st.session_state.chat_history.append({"role": "assistant", "content": "🚫 Actions cancelled."})
