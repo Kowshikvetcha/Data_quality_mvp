@@ -132,10 +132,10 @@ class TestInferColumnType:
         assert infer_column_type(series) == "numeric"
 
     def test_handle_sparse_data(self):
-        """ICT-05: Handle sparse data (<5 values)."""
+        """ICT-05: Handle sparse data (<5 values) -- numeric values are detected."""
         series = pd.Series([1, 2, None, None, None])
-        # Only 2 non-null values, defaults to string
-        assert infer_column_type(series) == "string"
+        # Only 2 non-null values, but they are numeric so inferred as numeric
+        assert infer_column_type(series) == "numeric"
 
     def test_multiple_date_formats_ymd(self):
         """ICT-06a: Multiple date formats - Y-m-d."""
