@@ -1,3 +1,7 @@
+from core.logger import get_logger
+
+logger = get_logger("executor")
+
 from core.cleaning import (
     fill_nulls,
     trim_spaces,
@@ -36,30 +40,67 @@ from core.cleaning import (
 
 
 def execute_tool(df, tool_call, column_types):
-    name = tool_call["tool_name"]
-    args = tool_call["arguments"]
-    
+    # Validate tool_call structure
+    if not isinstance(tool_call, dict):
+        raise ValueError("Invalid tool call: expected a dictionary.")
+
+    name = tool_call.get("tool_name")
+    args = tool_call.get("arguments")
+    logger.info("Executing tool: %s with args: %s", name, args)
+
+    if not name:
+        raise ValueError("Invalid tool call: missing 'tool_name' key.")
+    if args is None:
+        raise ValueError(f"Invalid tool call for '{name}': missing 'arguments' key.")
+    if not isinstance(args, dict):
+        raise ValueError(
+            f"Invalid tool call for '{name}': 'arguments' must be a dictionary, "
+            f"got {type(args).__name__}."
+        )
+
     # Some tools don't require a column argument
     col = args.get("column", None)
 
     # Validate column exists for tools that require it
     if col is not None and col not in df.columns:
-        raise ValueError(f"Column '{col}' not found")
+        available = ", ".join(df.columns.tolist()[:10])
+        suffix = "..." if len(df.columns) > 10 else ""
+        raise ValueError(
+            f"Column '{col}' not found. Available columns: {available}{suffix}"
+        )
+
+    # Safe column type lookup (defaults to "string" if not in metadata)
+    col_type = column_types.get(col, "string") if col else None
 
     # Basic cleaning tools
     if name == "fill_nulls":
-        if args["method"] in ["mean", "median"] and column_types[col] != "numeric":
-            raise ValueError("Mean/median only for numeric columns")
+        method = args.get("method", "")
+        if method in ["mean", "median"] and col_type != "numeric":
+            raise ValueError(
+                f"Cannot fill nulls in '{col}' with {method} because it is a "
+                f"{col_type} column. Mean/median fill is only available for numeric columns."
+            )
+        if method == "custom" and args.get("value") is None:
+            raise ValueError(
+                f"Custom fill method requires a 'value' argument. "
+                f"Please specify the value to fill with."
+            )
         return fill_nulls(df, **args)
 
     if name == "trim_spaces":
-        if column_types[col] != "string":
-            raise ValueError("Trim spaces only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot trim spaces on column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return trim_spaces(df, **args)
 
     if name == "standardize_case":
-        if column_types[col] != "string":
-            raise ValueError("Case standardization only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot standardize case on column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return standardize_case(df, **args)
 
     if name == "drop_rows_with_nulls":
@@ -67,64 +108,100 @@ def execute_tool(df, tool_call, column_types):
 
     # Numeric transformations
     if name == "round_numeric":
-        if column_types[col] != "numeric":
-            raise ValueError("Rounding only for numeric columns")
+        if col_type != "numeric":
+            raise ValueError(
+                f"Cannot round column '{col}' because it is a "
+                f"{col_type} column. This operation requires a numeric column."
+            )
         return round_numeric(df, **args)
 
     if name == "clip_numeric":
-        if column_types[col] != "numeric":
-            raise ValueError("Clipping only for numeric columns")
+        if col_type != "numeric":
+            raise ValueError(
+                f"Cannot clip column '{col}' because it is a "
+                f"{col_type} column. This operation requires a numeric column."
+            )
         return clip_numeric(df, **args)
 
     if name == "remove_outliers":
-        if column_types[col] != "numeric":
-            raise ValueError("Outlier removal only for numeric columns")
+        if col_type != "numeric":
+            raise ValueError(
+                f"Cannot remove outliers from column '{col}' because it is a "
+                f"{col_type} column. This operation requires a numeric column."
+            )
         return remove_outliers(df, **args)
 
     if name == "scale_numeric":
-        if column_types[col] != "numeric":
-            raise ValueError("Scaling only for numeric columns")
+        if col_type != "numeric":
+            raise ValueError(
+                f"Cannot scale column '{col}' because it is a "
+                f"{col_type} column. This operation requires a numeric column."
+            )
         return scale_numeric(df, **args)
 
     if name == "apply_math":
-        if column_types[col] != "numeric":
-            raise ValueError("Math operations only for numeric columns")
+        if col_type != "numeric":
+            raise ValueError(
+                f"Cannot apply math operation on column '{col}' because it is a "
+                f"{col_type} column. This operation requires a numeric column."
+            )
         return apply_math(df, **args)
 
     if name == "bin_numeric":
-        if column_types[col] != "numeric":
-            raise ValueError("Binning only for numeric columns")
+        if col_type != "numeric":
+            raise ValueError(
+                f"Cannot bin column '{col}' because it is a "
+                f"{col_type} column. This operation requires a numeric column."
+            )
         return bin_numeric(df, **args)
 
     if name == "replace_negative_values":
-        if column_types[col] != "numeric":
-            raise ValueError("Replacing negatives only for numeric columns")
+        if col_type != "numeric":
+            raise ValueError(
+                f"Cannot replace negative values in column '{col}' because it is a "
+                f"{col_type} column. This operation requires a numeric column."
+            )
         return replace_negative_values(df, **args)
 
     # String transformations
     if name == "replace_text":
-        if column_types[col] != "string":
-            raise ValueError("Text replacement only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot replace text in column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return replace_text(df, **args)
 
     if name == "remove_special_chars":
-        if column_types[col] != "string":
-            raise ValueError("Removing special chars only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot remove special characters from column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return remove_special_chars(df, **args)
 
     if name == "pad_string":
-        if column_types[col] != "string":
-            raise ValueError("Padding only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot pad column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return pad_string(df, **args)
 
     if name == "slice_string":
-        if column_types[col] != "string":
-            raise ValueError("Slicing only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot slice column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return slice_string(df, **args)
 
     if name == "add_prefix_suffix":
-        if column_types[col] != "string":
-            raise ValueError("Adding prefix/suffix only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot add prefix/suffix to column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return add_prefix_suffix(df, **args)
 
     # Date transformations
@@ -139,7 +216,7 @@ def execute_tool(df, tool_call, column_types):
 
     if name == "date_difference":
         return date_difference(df, **args)
-        
+
     if name == "convert_column_type":
         return convert_column_type(df, **args)
 
@@ -192,12 +269,14 @@ def execute_tool(df, tool_call, column_types):
         return drop_columns_batch(df, **args)
 
     if name == "replace_text_regex":
-        if column_types[col] != "string":
-            raise ValueError("Regex replacement only for string columns")
+        if col_type != "string":
+            raise ValueError(
+                f"Cannot apply regex replacement on column '{col}' because it is a "
+                f"{col_type} column. This operation is only available for text columns."
+            )
         return replace_text_regex(df, **args)
 
     if name == "create_calculated_column":
         return create_calculated_column(df, **args)
 
-    raise ValueError(f"Unsupported tool: {name}")
-
+    raise ValueError(f"Unsupported tool: '{name}'. Please check the tool name and try again.")

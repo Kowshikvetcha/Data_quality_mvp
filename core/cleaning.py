@@ -1,8 +1,31 @@
+import re as _re
 import pandas as pd
+import numpy as np
 from typing import List, Union, Optional
+
+from core.validators import (
+    validate_column_exists,
+    validate_columns_exist,
+    validate_column_is_numeric,
+    validate_column_is_string,
+    safe_mode,
+    validate_regex_pattern,
+)
 
 
 def fill_nulls(df: pd.DataFrame, column: str, method: str, value: any = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "fill_nulls")
+    if df.empty:
+        return df.copy()
+
+    if method in ("mean", "median"):
+        validate_column_is_numeric(df, column, f"fill_nulls with {method}")
+    if method == "zero" and not pd.api.types.is_numeric_dtype(df[column]):
+        raise TypeError(
+            f"Cannot fill column '{column}' with zero because it contains "
+            f"{df[column].dtype} data. Use 'custom' with an appropriate value instead."
+        )
+
     df = df.copy()
 
     if method == "mean":
@@ -10,7 +33,13 @@ def fill_nulls(df: pd.DataFrame, column: str, method: str, value: any = None) ->
     elif method == "median":
         df[column] = df[column].fillna(df[column].median())
     elif method == "mode":
-        df[column] = df[column].fillna(df[column].mode().iloc[0])
+        mode_val = safe_mode(df[column])
+        if mode_val is None:
+            raise ValueError(
+                f"Cannot fill nulls with mode in column '{column}' because "
+                f"all values are missing. No mode can be computed."
+            )
+        df[column] = df[column].fillna(mode_val)
     elif method == "zero":
         df[column] = df[column].fillna(0)
     elif method == "ffill":
@@ -45,6 +74,10 @@ def fill_nulls(df: pd.DataFrame, column: str, method: str, value: any = None) ->
 
 
 def trim_spaces(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    validate_column_exists(df, column, "trim_spaces")
+    validate_column_is_string(df, column, "trim_spaces")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     mask = df[column].notna()
     df.loc[mask, column] = df.loc[mask, column].astype(str).str.strip()
@@ -54,6 +87,10 @@ def trim_spaces(df: pd.DataFrame, column: str) -> pd.DataFrame:
 
 
 def standardize_case(df: pd.DataFrame, column: str, case: str) -> pd.DataFrame:
+    validate_column_exists(df, column, "standardize_case")
+    validate_column_is_string(df, column, "standardize_case")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     mask = df[column].notna()
 
@@ -70,6 +107,7 @@ def standardize_case(df: pd.DataFrame, column: str, case: str) -> pd.DataFrame:
 
 
 def drop_rows_with_nulls(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    validate_column_exists(df, column, "drop_rows_with_nulls")
     return df[df[column].notna()].copy()
 
 
@@ -77,14 +115,16 @@ def drop_rows_with_nulls(df: pd.DataFrame, column: str) -> pd.DataFrame:
 # Numeric Transformations
 # -------------------------
 def round_numeric(df: pd.DataFrame, column: str, decimals: int, method: str = 'round') -> pd.DataFrame:
+    validate_column_exists(df, column, "round_numeric")
+    validate_column_is_numeric(df, column, "round_numeric")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     if method == 'round':
         df[column] = df[column].round(decimals)
     elif method == 'floor':
-        import numpy as np
         df[column] = np.floor(df[column] * (10 ** decimals)) / (10 ** decimals)
     elif method == 'ceil':
-        import numpy as np
         df[column] = np.ceil(df[column] * (10 ** decimals)) / (10 ** decimals)
     else:
         raise ValueError(f"Unsupported rounding method: {method}")
@@ -92,12 +132,20 @@ def round_numeric(df: pd.DataFrame, column: str, decimals: int, method: str = 'r
 
 
 def clip_numeric(df: pd.DataFrame, column: str, lower: float = None, upper: float = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "clip_numeric")
+    validate_column_is_numeric(df, column, "clip_numeric")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     df[column] = df[column].clip(lower=lower, upper=upper)
     return df
 
 
 def scale_numeric(df: pd.DataFrame, column: str, method: str) -> pd.DataFrame:
+    validate_column_exists(df, column, "scale_numeric")
+    validate_column_is_numeric(df, column, "scale_numeric")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     if method == 'minmax':
         min_val = df[column].min()
@@ -115,15 +163,35 @@ def scale_numeric(df: pd.DataFrame, column: str, method: str) -> pd.DataFrame:
 
 
 def apply_math(df: pd.DataFrame, column: str, operation: str) -> pd.DataFrame:
-    import numpy as np
+    validate_column_exists(df, column, "apply_math")
+    validate_column_is_numeric(df, column, "apply_math")
+    if df.empty:
+        return df.copy()
+
+    # Domain validation for sqrt and log
+    if operation == 'sqrt':
+        non_null = df[column].dropna()
+        if len(non_null) > 0 and (non_null < 0).any():
+            neg_count = int((non_null < 0).sum())
+            raise ValueError(
+                f"Cannot apply sqrt to column '{column}': {neg_count} value(s) are negative. "
+                f"Apply 'abs' first or use a different operation."
+            )
+    elif operation == 'log':
+        non_null = df[column].dropna()
+        if len(non_null) > 0 and (non_null <= 0).any():
+            bad_count = int((non_null <= 0).sum())
+            raise ValueError(
+                f"Cannot apply log to column '{column}': {bad_count} value(s) are zero or negative. "
+                f"Logarithm requires strictly positive values."
+            )
+
     df = df.copy()
     if operation == 'abs':
         df[column] = df[column].abs()
     elif operation == 'sqrt':
         df[column] = np.sqrt(df[column])
     elif operation == 'log':
-        # Adding a small constant to avoid log(0) if necessary, or just letting it be -inf/nan. 
-        # Standard pandas behavior is preferred.
         df[column] = np.log(df[column])
     elif operation == 'square':
         df[column] = df[column] ** 2
@@ -133,14 +201,26 @@ def apply_math(df: pd.DataFrame, column: str, operation: str) -> pd.DataFrame:
 
 
 def bin_numeric(df: pd.DataFrame, column: str, bins: int, labels: list = None, new_column: Optional[str] = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "bin_numeric")
+    validate_column_is_numeric(df, column, "bin_numeric")
+    if df.empty:
+        return df.copy()
+    if labels is not None and len(labels) != bins:
+        raise ValueError(
+            f"Number of labels ({len(labels)}) must match number of bins ({bins})."
+        )
     df = df.copy()
-    
+
     target_col = new_column if new_column else column
     df[target_col] = pd.cut(df[column], bins=bins, labels=labels).astype(str)
     return df
 
 
 def remove_outliers(df: pd.DataFrame, column: str, method: str = 'iqr', action: str = 'null', value: any = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "remove_outliers")
+    validate_column_is_numeric(df, column, "remove_outliers")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     series = df[column].dropna()
     
@@ -200,8 +280,12 @@ def remove_outliers(df: pd.DataFrame, column: str, method: str = 'iqr', action: 
 
 
 def replace_negative_values(df: pd.DataFrame, column: str, replacement_value: Union[float, str] = 0.0) -> pd.DataFrame:
+    validate_column_exists(df, column, "replace_negative_values")
+    validate_column_is_numeric(df, column, "replace_negative_values")
+    if df.empty:
+        return df.copy()
     df = df.copy()
-    
+
     # Handle statistical replacement keys
     if isinstance(replacement_value, str):
         if replacement_value.lower() in ['mean', 'median']:
@@ -242,6 +326,10 @@ def replace_negative_values(df: pd.DataFrame, column: str, replacement_value: Un
 # String Transformations
 # -------------------------
 def replace_text(df: pd.DataFrame, column: str, old_val: str, new_val: str) -> pd.DataFrame:
+    validate_column_exists(df, column, "replace_text")
+    validate_column_is_string(df, column, "replace_text")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     mask = df[column].notna()
     # Using regex=False for simple substring replacement
@@ -252,6 +340,10 @@ def replace_text(df: pd.DataFrame, column: str, old_val: str, new_val: str) -> p
 
 
 def remove_special_chars(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    validate_column_exists(df, column, "remove_special_chars")
+    validate_column_is_string(df, column, "remove_special_chars")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     mask = df[column].notna()
     # Keep only alphanumeric and whitespace
@@ -262,6 +354,10 @@ def remove_special_chars(df: pd.DataFrame, column: str) -> pd.DataFrame:
 
 
 def pad_string(df: pd.DataFrame, column: str, width: int, fillchar: str = '0', side: str = 'left') -> pd.DataFrame:
+    validate_column_exists(df, column, "pad_string")
+    validate_column_is_string(df, column, "pad_string")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     mask = df[column].notna()
     
@@ -277,6 +373,10 @@ def pad_string(df: pd.DataFrame, column: str, width: int, fillchar: str = '0', s
 
 
 def slice_string(df: pd.DataFrame, column: str, start: int = 0, end: int = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "slice_string")
+    validate_column_is_string(df, column, "slice_string")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     mask = df[column].notna()
     df.loc[mask, column] = df.loc[mask, column].astype(str).str.slice(start, end)
@@ -286,6 +386,10 @@ def slice_string(df: pd.DataFrame, column: str, start: int = 0, end: int = None)
 
 
 def add_prefix_suffix(df: pd.DataFrame, column: str, prefix: str = "", suffix: str = "") -> pd.DataFrame:
+    validate_column_exists(df, column, "add_prefix_suffix")
+    validate_column_is_string(df, column, "add_prefix_suffix")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     mask = df[column].notna()
     df.loc[mask, column] = prefix + df.loc[mask, column].astype(str) + suffix
@@ -296,6 +400,9 @@ def add_prefix_suffix(df: pd.DataFrame, column: str, prefix: str = "", suffix: s
 # Date Transformations
 # -------------------------
 def convert_to_datetime(df: pd.DataFrame, column: str, format: str = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "convert_to_datetime")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     # errors='coerce' turns unparseable data to NaT
     df[column] = pd.to_datetime(df[column], format=format, errors='coerce')
@@ -303,6 +410,9 @@ def convert_to_datetime(df: pd.DataFrame, column: str, format: str = None) -> pd
 
 
 def extract_date_part(df: pd.DataFrame, column: str, part: str, new_column: Optional[str] = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "extract_date_part")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     # Ensure column is datetime (source)
     temp_series = df[column]
@@ -328,6 +438,9 @@ def extract_date_part(df: pd.DataFrame, column: str, part: str, new_column: Opti
 
 
 def offset_date(df: pd.DataFrame, column: str, value: int, unit: str, new_column: Optional[str] = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "offset_date")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     if not pd.api.types.is_datetime64_any_dtype(df[column]):
         df[column] = pd.to_datetime(df[column], errors='coerce')
@@ -351,14 +464,23 @@ def offset_date(df: pd.DataFrame, column: str, value: int, unit: str, new_column
 
 
 def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today', unit: str = 'days', new_column: Optional[str] = None) -> pd.DataFrame:
+    validate_column_exists(df, column, "date_difference")
+    if df.empty:
+        return df.copy()
     df = df.copy()
     if not pd.api.types.is_datetime64_any_dtype(df[column]):
         df[column] = pd.to_datetime(df[column], errors='coerce')
-        
+
     if reference_date == 'today':
         ref = pd.Timestamp.now()
     else:
-        ref = pd.Timestamp(reference_date)
+        try:
+            ref = pd.Timestamp(reference_date)
+        except (ValueError, Exception) as e:
+            raise ValueError(
+                f"Invalid reference date '{reference_date}'. "
+                f"Please use 'today' or a valid date string like 'YYYY-MM-DD'. Error: {e}"
+            )
         
     diff = ref - df[column]
     
@@ -379,8 +501,11 @@ def date_difference(df: pd.DataFrame, column: str, reference_date: str = 'today'
 
 
 def convert_column_type(df: pd.DataFrame, column: str, target_type: str) -> pd.DataFrame:
+    validate_column_exists(df, column, "convert_column_type")
+    if df.empty:
+        return df.copy()
     df = df.copy()
-    
+
     if target_type == "numeric":
         df[column] = pd.to_numeric(df[column], errors='coerce')
     elif target_type == "string":
@@ -423,18 +548,20 @@ def convert_column_type(df: pd.DataFrame, column: str, target_type: str) -> pd.D
 # Dataset-level Operations
 # -------------------------
 def deduplicate_rows(
-    df: pd.DataFrame, 
-    subset: Optional[List[str]] = None, 
+    df: pd.DataFrame,
+    subset: Optional[List[str]] = None,
     keep: str = 'first'
 ) -> pd.DataFrame:
     """
     Remove duplicate rows from the DataFrame.
-    
+
     Args:
         df: Input DataFrame
         subset: Optional list of columns to consider for duplicates. If None, uses all columns.
         keep: 'first', 'last', or False. Which duplicate to keep.
     """
+    if subset is not None:
+        validate_columns_exist(df, subset, "deduplicate_rows")
     df = df.copy()
     return df.drop_duplicates(subset=subset, keep=keep)
 
@@ -469,6 +596,12 @@ def reorder_columns(df: pd.DataFrame, column_order: List[str]) -> pd.DataFrame:
         df: Input DataFrame
         column_order: List of column names in desired order
     """
+    missing = [c for c in column_order if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Cannot reorder: columns not found: {', '.join(missing)}. "
+            f"Available columns: {', '.join(df.columns.tolist()[:10])}"
+        )
     df = df.copy()
     # Add any missing columns at the end
     remaining = [c for c in df.columns if c not in column_order]
@@ -591,7 +724,8 @@ def fill_nulls_batch(
             if len(mode_val) > 0:
                 df[column] = df[column].fillna(mode_val.iloc[0])
         elif method == "zero":
-            df[column] = df[column].fillna(0)
+            if pd.api.types.is_numeric_dtype(df[column]):
+                df[column] = df[column].fillna(0)
         elif method == "ffill":
             df[column] = df[column].ffill()
         elif method == "bfill":
@@ -692,10 +826,13 @@ def replace_text_regex(df: pd.DataFrame, column: str, pattern: str, replacement:
     """
     Replace text using regex pattern.
     """
+    validate_column_exists(df, column, "replace_text_regex")
+    validate_column_is_string(df, column, "replace_text_regex")
+    validate_regex_pattern(pattern)
+    if df.empty:
+        return df.copy()
     df = df.copy()
-    if column not in df.columns:
-        raise ValueError(f"Column '{column}' not found")
-        
+
     mask = df[column].notna()
     # Use regex=True
     df.loc[mask, column] = df.loc[mask, column].astype(str).str.replace(pattern, replacement, regex=True)
@@ -704,18 +841,50 @@ def replace_text_regex(df: pd.DataFrame, column: str, pattern: str, replacement:
     return df
 
 
+_ALLOWED_FORMULA_PATTERN = _re.compile(
+    r'^[\w\s\+\-\*\/\.\(\)\,\<\>\=\!\&\|\~\%\^]+$'
+)
+_FORBIDDEN_TOKENS = frozenset({
+    'import', 'exec', 'eval', 'compile', 'open', 'os', 'sys',
+    '__', 'globals', 'locals', 'getattr', 'setattr', 'delattr',
+    'breakpoint', 'input', 'print', 'subprocess', 'shutil',
+})
+
+
+def _validate_formula(formula: str) -> None:
+    """Validate that a formula is safe for pd.eval()."""
+    if not formula or not formula.strip():
+        raise ValueError("Formula cannot be empty.")
+    if not _ALLOWED_FORMULA_PATTERN.match(formula):
+        raise ValueError(
+            "Formula contains disallowed characters. "
+            "Only column names, numbers, and arithmetic operators (+, -, *, /, %) are allowed."
+        )
+    tokens = set(_re.findall(r'[a-zA-Z_]\w*', formula.lower()))
+    dangerous = tokens & _FORBIDDEN_TOKENS
+    # Also check for dunder access (e.g., __class__, __bases__)
+    if not dangerous and any('__' in t for t in tokens):
+        dangerous = {'__'}
+    if dangerous:
+        raise ValueError(
+            f"Formula contains forbidden keywords: {', '.join(sorted(dangerous))}. "
+            f"Only column references and arithmetic operations are allowed."
+        )
+
+
 def create_calculated_column(df: pd.DataFrame, new_column_name: str, formula: str) -> pd.DataFrame:
     """
     Create a new column using a formula (e.g., 'colA + colB' or 'colA * 2').
     Uses pd.eval for evaluation.
     """
+    if df.empty:
+        return df.copy()
     df = df.copy()
     if new_column_name in df.columns:
          raise ValueError(f"Column '{new_column_name}' already exists")
-         
+
+    _validate_formula(formula)
     try:
-        # pd.eval can handle simple arithmetic and column references
-        # We perform it on the dataframe context
         df[new_column_name] = df.eval(formula)
     except Exception as e:
         raise ValueError(f"Failed to evaluate formula '{formula}': {e}")

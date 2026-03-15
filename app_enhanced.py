@@ -21,7 +21,7 @@ from core.checks import (
     column_completeness_checks,
     type_parsing_checks,
     string_quality_checks,
-    numeric_validity_checks,
+    numeric_validity_checks,stre
     outlier_checks,
 )
 from core.summary import build_column_summary, compute_dataset_health
@@ -31,6 +31,11 @@ from core.confirm import describe_tool_call
 from core.suggestions import generate_suggestions
 from core.diff_preview import preview_transformation, count_changes
 from core.export import get_export_bytes_csv, get_export_bytes_excel, get_export_bytes_json
+from config import DATAFRAME_PREVIEW_ROWS, MAX_UNDO_HISTORY, APP_TITLE, APP_VERSION
+from core.logger import setup_logging, get_logger
+
+setup_logging()
+logger = get_logger("app")
 
 # ------------------------
 # Page config
@@ -79,6 +84,7 @@ if st.session_state.extra_datasets is None:
 # ------------------------
 # Helper: Run quality checks
 # ------------------------
+@st.cache_data(show_spinner=False)
 def run_quality_checks(df):
     column_types = infer_all_column_types(df)
     report = {
@@ -106,6 +112,16 @@ def refresh_suggestions():
             report,
             st.session_state.column_types
         )
+
+
+# ------------------------
+# Helper: Push to undo history with cap
+# ------------------------
+def _push_history(df):
+    """Push a DataFrame onto the undo stack, capping at MAX_UNDO_HISTORY."""
+    st.session_state.df_history.append(df.copy())
+    if len(st.session_state.df_history) > MAX_UNDO_HISTORY:
+        st.session_state.df_history.pop(0)
 
 
 # ------------------------
@@ -211,6 +227,18 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
+# Sidebar: System Status
+with st.sidebar:
+    st.divider()
+    st.caption(f"v{APP_VERSION}")
+    from config import OPENAI_API_KEY as _key, OPENAI_MODEL as _model
+    if _key:
+        st.success(f"AI: {_model}", icon="🟢")
+    else:
+        st.error("AI: No API Key", icon="🔴")
+    if st.session_state.df_history:
+        st.caption(f"Undo stack: {len(st.session_state.df_history)}/{MAX_UNDO_HISTORY}")
+
 # Stop if no data
 if st.session_state.original_df is None:
     st.info("👈 Upload a dataset (CSV, Excel, Parquet) to start.")
@@ -259,17 +287,16 @@ if st.session_state.original_df is not None and show_type_override:
             st.write("") # Spacer
             if st.button("Apply Change", type="primary"):
                 if new_type != current_type:
-                    # Update metadata
-                    st.session_state.column_types[col_to_change] = new_type
-                    # Attempt conversion
                     try:
                         from core.cleaning import convert_column_type
                         st.session_state.cleaned_df = convert_column_type(st.session_state.cleaned_df, col_to_change, new_type)
+                        # Only update metadata AFTER successful conversion
+                        st.session_state.column_types[col_to_change] = new_type
                         refresh_suggestions()
                         st.success(f"✅ Converted '{col_to_change}' to {new_type}")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Failed to convert: {e}")
+                        st.error(f"Failed to convert '{col_to_change}' to {new_type}: {e}")
                 else:
                     st.info("Type is already set to " + new_type)
     st.divider()
@@ -303,7 +330,7 @@ def undo_last_action():
 # Helper: Apply tool
 # ------------------------
 def apply_manual_tool(tool_name, arguments):
-    st.session_state.df_history.append(st.session_state.cleaned_df.copy())
+    _push_history(st.session_state.cleaned_df)
     tool_call = {"tool_name": tool_name, "arguments": arguments}
     st.session_state.executed_actions.append(tool_call)
     try:
@@ -342,7 +369,7 @@ if current_page == "🕵️ Data Inspector":
     
     with col1:
         st.subheader("Original Data")
-        st.dataframe(st.session_state.original_df.head(50), use_container_width=True)
+        st.dataframe(st.session_state.original_df.head(DATAFRAME_PREVIEW_ROWS), use_container_width=True)
         _, orig_summary, orig_health = run_quality_checks(st.session_state.original_df)
         st.metric("Health Score (Original)", orig_health["score"], orig_health["status"])
         st.caption("Issues Found:")
@@ -352,7 +379,7 @@ if current_page == "🕵️ Data Inspector":
         st.subheader("Current Cleaned Data")
 
         if st.session_state.has_cleaning_applied:
-            st.dataframe(st.session_state.cleaned_df.head(50), use_container_width=True)
+            st.dataframe(st.session_state.cleaned_df.head(DATAFRAME_PREVIEW_ROWS), use_container_width=True)
             _, clean_summary, clean_health = run_quality_checks(st.session_state.cleaned_df)
             
             delta = round(clean_health["score"] - orig_health["score"], 2)
@@ -370,91 +397,106 @@ if current_page == "🕵️ Data Inspector":
     viz_tabs = st.tabs(["Column Profile", "Correlation Matrix", "Box Plots", "Scatter Plot"])
     
     with viz_tabs[0]:
-        # Persistence logic for column selection
-        if "inspector_selected_col_name" not in st.session_state:
-            st.session_state.inspector_selected_col_name = st.session_state.cleaned_df.columns[0]
-            
         cols = st.session_state.cleaned_df.columns.tolist()
-        current_index = 0
-        if st.session_state.inspector_selected_col_name in cols:
-            current_index = cols.index(st.session_state.inspector_selected_col_name)
-        
-        def on_change_col():
-            st.session_state.inspector_selected_col_name = st.session_state.inspector_viz_key
-            
-        selected_col = st.selectbox(
-            "Select Column to Visualize", 
-            cols, 
-            index=current_index,
-            key="inspector_viz_key",
-            on_change=on_change_col
-        )
-        
-        viz_col1, viz_col2 = st.columns(2)
-        with viz_col1:
-            st.write(f"**Stats for '{selected_col}':**")
-            st.write(st.session_state.cleaned_df[selected_col].describe())
-        
-        with viz_col2:
-            st.write(f"**Distribution:**")
-            if pd.api.types.is_numeric_dtype(st.session_state.cleaned_df[selected_col]):
-                chart_data = st.session_state.cleaned_df[selected_col].dropna()
-                if chart_data.nunique() <= 20:
-                    counts = chart_data.value_counts().sort_index()
-                else:
-                    counts = chart_data.value_counts(bins=20, sort=False)
-                    counts.index = counts.index.astype(str)
-                st.bar_chart(counts)
-            else:
-                st.bar_chart(st.session_state.cleaned_df[selected_col].value_counts().head(20))
+        if not cols:
+            st.info("No columns available to visualize.")
+        else:
+            # Persistence logic for column selection
+            if "inspector_selected_col_name" not in st.session_state or st.session_state.inspector_selected_col_name not in cols:
+                st.session_state.inspector_selected_col_name = cols[0]
+
+            current_index = 0
+            if st.session_state.inspector_selected_col_name in cols:
+                current_index = cols.index(st.session_state.inspector_selected_col_name)
+
+            def on_change_col():
+                st.session_state.inspector_selected_col_name = st.session_state.inspector_viz_key
+
+            selected_col = st.selectbox(
+                "Select Column to Visualize",
+                cols,
+                index=current_index,
+                key="inspector_viz_key",
+                on_change=on_change_col
+            )
+
+            viz_col1, viz_col2 = st.columns(2)
+            with viz_col1:
+                st.write(f"**Stats for '{selected_col}':**")
+                st.write(st.session_state.cleaned_df[selected_col].describe())
+
+            with viz_col2:
+                st.write(f"**Distribution:**")
+                try:
+                    if pd.api.types.is_numeric_dtype(st.session_state.cleaned_df[selected_col]):
+                        chart_data = st.session_state.cleaned_df[selected_col].dropna()
+                        if chart_data.nunique() <= 20:
+                            counts = chart_data.value_counts().sort_index()
+                        else:
+                            counts = chart_data.value_counts(bins=20, sort=False)
+                            counts.index = counts.index.astype(str)
+                        st.bar_chart(counts)
+                    else:
+                        st.bar_chart(st.session_state.cleaned_df[selected_col].value_counts().head(20))
+                except Exception as e:
+                    st.warning(f"Could not render distribution chart: {e}")
                 
     with viz_tabs[1]:
         st.write("**Correlation Matrix (Numeric Columns)**")
-        numeric_df = st.session_state.cleaned_df.select_dtypes(include=['float64', 'int64'])
-        if numeric_df.shape[1] > 1:
-            corr = numeric_df.corr().reset_index().melt('index')
-            heatmap = alt.Chart(corr).mark_rect().encode(
-                x=alt.X('index', title=None),
-                y=alt.Y('variable', title=None),
-                color=alt.Color('value', scale=alt.Scale(scheme='redblue', domain=[-1, 1])),
-                tooltip=['index', 'variable', 'value']
-            ).properties(height=400, width=500)
-            
-            text = heatmap.mark_text(baseline='middle').encode(
-                text=alt.Text('value', format='.2f'),
-                color=alt.value('black')
-            )
-            st.altair_chart(heatmap + text, use_container_width=True)
-        else:
-            st.info("Not enough numeric columns for correlation matrix.")
+        try:
+            numeric_df = st.session_state.cleaned_df.select_dtypes(include=['float64', 'int64'])
+            if numeric_df.shape[1] > 1:
+                corr = numeric_df.corr().reset_index().melt('index')
+                heatmap = alt.Chart(corr).mark_rect().encode(
+                    x=alt.X('index', title=None),
+                    y=alt.Y('variable', title=None),
+                    color=alt.Color('value', scale=alt.Scale(scheme='redblue', domain=[-1, 1])),
+                    tooltip=['index', 'variable', 'value']
+                ).properties(height=400, width=500)
+
+                text = heatmap.mark_text(baseline='middle').encode(
+                    text=alt.Text('value', format='.2f'),
+                    color=alt.value('black')
+                )
+                st.altair_chart(heatmap + text, use_container_width=True)
+            else:
+                st.info("Not enough numeric columns for correlation matrix.")
+        except Exception as e:
+            st.warning(f"Could not render correlation matrix: {e}")
 
     with viz_tabs[2]:
         st.write("**Box Plots (Outlier Detection)**")
-        num_cols = st.session_state.cleaned_df.select_dtypes(include=['number']).columns.tolist()
-        if num_cols:
-            bp_col = st.selectbox("Select Column for Box Plot", num_cols, key="bp_col")
-            
-            base = alt.Chart(st.session_state.cleaned_df).encode(y=alt.Y(bp_col, title=bp_col))
-            boxplot = base.mark_boxplot(extent='min-max').properties(width=400)
-            st.altair_chart(boxplot, use_container_width=True)
-        else:
-            st.info("No numeric columns available.")
+        try:
+            num_cols = st.session_state.cleaned_df.select_dtypes(include=['number']).columns.tolist()
+            if num_cols:
+                bp_col = st.selectbox("Select Column for Box Plot", num_cols, key="bp_col")
+
+                base = alt.Chart(st.session_state.cleaned_df).encode(y=alt.Y(bp_col, title=bp_col))
+                boxplot = base.mark_boxplot(extent='min-max').properties(width=400)
+                st.altair_chart(boxplot, use_container_width=True)
+            else:
+                st.info("No numeric columns available.")
+        except Exception as e:
+            st.warning(f"Could not render box plot: {e}")
 
     with viz_tabs[3]:
         st.write("**Scatter Plot**")
-        num_cols = st.session_state.cleaned_df.select_dtypes(include=['number']).columns.tolist()
-        if len(num_cols) >= 2:
-            sp_x = st.selectbox("X Axis", num_cols, index=0, key="sp_x")
-            sp_y = st.selectbox("Y Axis", num_cols, index=1, key="sp_y")
-            
-            scatter = alt.Chart(st.session_state.cleaned_df).mark_circle(size=60).encode(
-                x=sp_x,
-                y=sp_y,
-                tooltip=[sp_x, sp_y]
-            ).interactive()
-            st.altair_chart(scatter, use_container_width=True)
-        else:
-            st.info("Need at least 2 numeric columns.")
+        try:
+            num_cols = st.session_state.cleaned_df.select_dtypes(include=['number']).columns.tolist()
+            if len(num_cols) >= 2:
+                sp_x = st.selectbox("X Axis", num_cols, index=0, key="sp_x")
+                sp_y = st.selectbox("Y Axis", num_cols, index=1, key="sp_y")
+
+                scatter = alt.Chart(st.session_state.cleaned_df).mark_circle(size=60).encode(
+                    x=sp_x,
+                    y=sp_y,
+                    tooltip=[sp_x, sp_y]
+                ).interactive()
+                st.altair_chart(scatter, use_container_width=True)
+            else:
+                st.info("Need at least 2 numeric columns.")
+        except Exception as e:
+            st.warning(f"Could not render scatter plot: {e}")
 
 
 # ======================== 
@@ -473,13 +515,27 @@ if current_page == "💬 Chat & Transform":
                 st.info("💡 Start by typing a message below, like 'Remove duplicates and fill missing ages with median'.")
             for msg in st.session_state.chat_history:
                 with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"], unsafe_allow_html=True)
+                    st.markdown(msg["content"])
 
         user_input = st.chat_input("Describe your data cleaning request...")
         if user_input:
             st.session_state.chat_history.append({"role": "user", "content": user_input})
+            tool_calls = None
             with st.spinner("🤖 Analyzing your request..."):
-                tool_calls = route_user_request(user_input, st.session_state.column_types)
+                try:
+                    tool_calls = route_user_request(user_input, st.session_state.column_types)
+                except ConnectionError as e:
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": f"**Connection Error:** {e}"
+                    })
+                    st.rerun()
+                except (ValueError, Exception) as e:
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": f"**Error:** {e}. Please try rephrasing your request."
+                    })
+                    st.rerun()
 
             if tool_calls:
                 if isinstance(tool_calls, list):
@@ -515,8 +571,11 @@ if current_page == "💬 Chat & Transform":
                 st.empty()
             with col2:
                 if st.button("✅ Apply Transformations", type="primary", use_container_width=True):
-                    st.session_state.df_history.append(st.session_state.cleaned_df.copy())
+                    pre_batch_df = st.session_state.cleaned_df.copy()
                     success_count = 0
+                    executed_actions_batch = []
+                    failed_tool = None
+                    error_message = None
                     for tc in st.session_state.pending_tool_calls:
                         try:
                             st.session_state.cleaned_df = execute_tool(
@@ -524,17 +583,25 @@ if current_page == "💬 Chat & Transform":
                                 tc,
                                 st.session_state.column_types
                             )
-                            st.session_state.executed_actions.append(tc)
+                            executed_actions_batch.append(tc)
                             success_count += 1
                         except Exception as e:
-                            st.error(f"❌ Error on '{tc['tool_name']}': {e}")
+                            failed_tool = tc.get("tool_name", "tool")
+                            error_message = str(e)
                             break
-                    st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-                    st.session_state.has_cleaning_applied = True
-                    refresh_suggestions()
-                    st.session_state.chat_history.append({"role": "assistant", "content": f"✅ Successfully applied {success_count} transformations!"})
-                    st.session_state.pending_tool_calls = None
-                    st.rerun()
+                    if failed_tool:
+                        st.session_state.cleaned_df = pre_batch_df
+                        st.session_state.column_types = infer_all_column_types(pre_batch_df)
+                        st.error(f"❌ Error on '{failed_tool}': {error_message}")
+                    else:
+                        _push_history(pre_batch_df)
+                        st.session_state.executed_actions.extend(executed_actions_batch)
+                        st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                        st.session_state.has_cleaning_applied = True
+                        refresh_suggestions()
+                        st.session_state.chat_history.append({"role": "assistant", "content": f"✅ Successfully applied {success_count} transformations!"})
+                        st.session_state.pending_tool_calls = None
+                        st.rerun()
             with col3:
                 if st.button("❌ Cancel", use_container_width=True):
                     st.session_state.chat_history.append({"role": "assistant", "content": "🚫 Actions cancelled."})
@@ -657,7 +724,7 @@ if current_page == "🛠️ Manual Transform":
                 method_missing = st.selectbox("Method", ["Drop Rows with Nulls", "Fill with Mean", "Fill with Median", "Fill with Mode", "Fill with Zero", "Forward Fill", "Backward Fill", "Fill with Custom Value"], key="missing_method", help="Choose how to handle missing values in the selected column.")
             with c3:
                 val_missing = None
-                if method_missing == "custom":
+                if method_missing == "Fill with Custom Value":
                     val_missing = st.text_input("Custom Value", key="missing_val")
                 
             method_map = {
@@ -679,11 +746,12 @@ if current_page == "🛠️ Manual Transform":
                     if short_method == "custom":
                         # Basic type inference for custom value
                         try:
-                            if val_missing.lower() == 'none': val_missing = None
-                            elif '.' in val_missing: val_missing = float(val_missing)
-                            else: val_missing = int(val_missing)
-                        except:
-                            pass
+                            if val_missing is not None and isinstance(val_missing, str):
+                                if val_missing.lower() == 'none': val_missing = None
+                                elif '.' in val_missing: val_missing = float(val_missing)
+                                else: val_missing = int(val_missing)
+                        except (ValueError, AttributeError):
+                            pass  # Keep as string if not parseable as number
                         args["value"] = val_missing
                     apply_manual_tool("fill_nulls", args)
 
@@ -802,7 +870,7 @@ if current_page == "🔗 Join Datasets":
             left_cols = st.session_state.cleaned_df.columns.tolist()
             
         with col_j2:
-            st.markdown("<h2 style='text-align: center; vertical-align: middle; line-height: 200px;'>+</h2>", unsafe_allow_html=True)
+            st.markdown("## +")
 
         with col_j3:
             st.subheader("Right Dataset")
@@ -847,7 +915,7 @@ if current_page == "🔗 Join Datasets":
                 
                 if st.button("🚀 Apply & Set as Main Dataset", type="primary"):
                     # Save current state to undo history first
-                    st.session_state.df_history.append(st.session_state.cleaned_df.copy())
+                    _push_history(st.session_state.cleaned_df)
                     
                     # Apply
                     st.session_state.cleaned_df = st.session_state.preview_result.copy()
@@ -892,9 +960,12 @@ if current_page == "🔮 AI Suggestions":
         
         # Apply All Button
         if st.button("✅ Apply All Suggestions", type="primary"):
-            st.session_state.df_history.append(st.session_state.cleaned_df.copy())
+            pre_batch_df = st.session_state.cleaned_df.copy()
             success_count = 0
-            
+            executed_actions_batch = []
+            failed_description = None
+            error_message = None
+
             for suggestion in sorted_suggestions:
                 tool_call = {
                     "tool_name": suggestion["tool_name"],
@@ -906,16 +977,29 @@ if current_page == "🔮 AI Suggestions":
                         tool_call,
                         st.session_state.column_types
                     )
-                    st.session_state.executed_actions.append(tool_call)
+                    executed_actions_batch.append(tool_call)
                     success_count += 1
                 except Exception as e:
-                    st.error(f"Failed to apply '{suggestion['description']}': {e}")
-            
-            st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
-            st.session_state.has_cleaning_applied = True
-            refresh_suggestions()
-            st.success(f"✅ Successfully applied {success_count} suggestions!")
-            st.rerun()
+                    failed_description = suggestion.get('description', suggestion['tool_name'])
+                    error_message = str(e)
+                    break
+
+            if failed_description:
+                # Full rollback
+                st.session_state.cleaned_df = pre_batch_df
+                st.session_state.column_types = infer_all_column_types(pre_batch_df)
+                st.error(
+                    f"Failed to apply '{failed_description}': {error_message}. "
+                    f"All changes have been rolled back."
+                )
+            else:
+                _push_history(pre_batch_df)
+                st.session_state.executed_actions.extend(executed_actions_batch)
+                st.session_state.column_types = infer_all_column_types(st.session_state.cleaned_df)
+                st.session_state.has_cleaning_applied = True
+                refresh_suggestions()
+                st.success(f"✅ Successfully applied {success_count} suggestions!")
+                st.rerun()
         
         st.divider()
         
@@ -946,13 +1030,16 @@ if current_page == "📤 Export":
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.download_button(
-                "📥 CSV",
-                data=get_export_bytes_csv(st.session_state.cleaned_df),
-                file_name="cleaned_data.csv",
-                mime="text/csv",
-                type="primary"
-            )
+            try:
+                st.download_button(
+                    "📥 CSV",
+                    data=get_export_bytes_csv(st.session_state.cleaned_df),
+                    file_name="cleaned_data.csv",
+                    mime="text/csv",
+                    type="primary"
+                )
+            except Exception as e:
+                st.warning(f"CSV export error: {e}")
         
         with col2:
             try:
@@ -966,12 +1053,15 @@ if current_page == "📤 Export":
                 st.warning("Excel export error.")
         
         with col3:
-            st.download_button(
-                "📥 JSON",
-                data=get_export_bytes_json(st.session_state.cleaned_df),
-                file_name="cleaned_data.json",
-                mime="application/json"
-            )
+            try:
+                st.download_button(
+                    "📥 JSON",
+                    data=get_export_bytes_json(st.session_state.cleaned_df),
+                    file_name="cleaned_data.json",
+                    mime="application/json"
+                )
+            except Exception as e:
+                st.warning(f"JSON export error: {e}")
         
         st.divider()
         st.subheader("Transformation Summary")
@@ -995,8 +1085,8 @@ if current_page == "📜 History & Code":
         script += "def clean_dataset(df):\n"
         
         for action in st.session_state.executed_actions:
-            tool = action["tool_name"]
-            args = action["arguments"]
+            tool = action.get("tool_name", "unknown_tool")
+            args = action.get("arguments", {})
             params = ", ".join([f"{k}={repr(v)}" for k, v in args.items()])
             script += f"    df = {tool}(df, {params})\n"
             

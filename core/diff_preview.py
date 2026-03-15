@@ -214,6 +214,17 @@ def preview_transformation(
     - after_sample: Sample of rows after  
     - error: Error message if failed
     """
+    if not callable(execute_tool_fn):
+        return {
+            "success": False,
+            "changes": None,
+            "summary": None,
+            "before_sample": None,
+            "after_sample": None,
+            "column_changes": None,
+            "error": "Internal error: invalid transformation function."
+        }
+
     try:
         # Execute on a copy
         df_after = execute_tool_fn(df.copy(), tool_call, column_types)

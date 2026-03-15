@@ -374,6 +374,52 @@ class TestExecuteToolUnsupported:
             "tool_name": "unsupported_tool_xyz",
             "arguments": {}
         }
-        
+
         with pytest.raises(ValueError, match="Unsupported tool"):
             execute_tool(simple_df, tool_call, column_types)
+
+
+# =============================================================================
+# Edge Case Tests -- Executor Validation Guards
+# =============================================================================
+
+class TestExecuteToolStructureValidation:
+    """Tests for tool_call structure validation in execute_tool."""
+
+    def test_missing_tool_name(self, simple_df):
+        """Raise ValueError when tool_name is missing."""
+        column_types = infer_all_column_types(simple_df)
+        tool_call = {"arguments": {"column": "name"}}
+        with pytest.raises(ValueError, match="tool_name"):
+            execute_tool(simple_df, tool_call, column_types)
+
+    def test_missing_arguments(self, simple_df):
+        """Raise ValueError when arguments key is missing."""
+        column_types = infer_all_column_types(simple_df)
+        tool_call = {"tool_name": "trim_spaces"}
+        with pytest.raises(ValueError, match="arguments"):
+            execute_tool(simple_df, tool_call, column_types)
+
+    def test_invalid_tool_call_type(self, simple_df):
+        """Raise ValueError when tool_call is not a dict."""
+        column_types = infer_all_column_types(simple_df)
+        with pytest.raises(ValueError, match="dictionary"):
+            execute_tool(simple_df, "not_a_dict", column_types)
+
+    def test_arguments_not_dict(self, simple_df):
+        """Raise ValueError when arguments is not a dict."""
+        column_types = infer_all_column_types(simple_df)
+        tool_call = {"tool_name": "trim_spaces", "arguments": "not_a_dict"}
+        with pytest.raises(ValueError, match="dictionary"):
+            execute_tool(simple_df, tool_call, column_types)
+
+    def test_column_not_in_column_types_defaults(self):
+        """Column not in column_types should default to string (no crash)."""
+        df = pd.DataFrame({'text': [' hello ', ' world ']})
+        # Pass empty column_types -- should still work with default
+        tool_call = {
+            "tool_name": "trim_spaces",
+            "arguments": {"column": "text"}
+        }
+        result = execute_tool(df, tool_call, {})
+        assert result['text'].iloc[0] == 'hello'

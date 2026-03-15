@@ -219,7 +219,7 @@ class TestDescribeToolCall:
         
         result = describe_tool_call(tool_call)
         
-        assert result == "Unknown action"
+        assert result == "Unknown action: unknown_tool_xyz"
 
 
 # =============================================================================

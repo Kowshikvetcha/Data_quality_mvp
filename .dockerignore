@@ -1,0 +1,17 @@
+.env
+.venv/
+env/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.gitattributes
+outputs/
+tests/
+sample_data/
+archive/
+*.md
+*.log
+.pytest_cache/
+.mypy_cache/
+.claude/

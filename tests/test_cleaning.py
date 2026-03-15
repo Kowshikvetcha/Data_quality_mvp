@@ -711,3 +711,181 @@ class TestCreateCalculatedColumn:
         result = create_calculated_column(df, 'doubled', 'a * 2')
         assert result['doubled'].iloc[0] == 2
         assert result['doubled'].iloc[1] == 4
+
+
+# =============================================================================
+# Edge Case Tests -- Validation Guards
+# =============================================================================
+
+class TestColumnExistenceValidation:
+    """Tests that operations raise ValueError for non-existent columns."""
+
+    def test_fill_nulls_missing_column(self):
+        df = pd.DataFrame({'a': [1, 2, 3]})
+        with pytest.raises(ValueError, match="not found"):
+            fill_nulls(df, 'nonexistent', 'mean')
+
+    def test_trim_spaces_missing_column(self):
+        df = pd.DataFrame({'a': ['x', 'y']})
+        with pytest.raises(ValueError, match="not found"):
+            trim_spaces(df, 'nonexistent')
+
+    def test_round_numeric_missing_column(self):
+        df = pd.DataFrame({'a': [1.0, 2.0]})
+        with pytest.raises(ValueError, match="not found"):
+            round_numeric(df, 'nonexistent', 2)
+
+    def test_remove_outliers_missing_column(self):
+        df = pd.DataFrame({'a': [1, 2, 3]})
+        with pytest.raises(ValueError, match="not found"):
+            remove_outliers(df, 'nonexistent')
+
+    def test_deduplicate_rows_missing_subset_column(self):
+        df = pd.DataFrame({'a': [1, 2, 3]})
+        with pytest.raises(ValueError, match="not found"):
+            deduplicate_rows(df, subset=['nonexistent'])
+
+
+class TestTypeValidation:
+    """Tests that operations raise TypeError for wrong column types."""
+
+    def test_mean_on_string_column(self):
+        df = pd.DataFrame({'name': ['Alice', 'Bob', None]})
+        with pytest.raises(TypeError, match="non-numeric"):
+            fill_nulls(df, 'name', 'mean')
+
+    def test_median_on_string_column(self):
+        df = pd.DataFrame({'name': ['Alice', 'Bob', None]})
+        with pytest.raises(TypeError, match="non-numeric"):
+            fill_nulls(df, 'name', 'median')
+
+    def test_zero_on_string_column(self):
+        df = pd.DataFrame({'name': ['Alice', 'Bob', None]})
+        with pytest.raises(TypeError, match="zero"):
+            fill_nulls(df, 'name', 'zero')
+
+    def test_trim_spaces_on_numeric(self):
+        df = pd.DataFrame({'val': [1, 2, 3]})
+        with pytest.raises(TypeError, match="text column"):
+            trim_spaces(df, 'val')
+
+    def test_standardize_case_on_numeric(self):
+        df = pd.DataFrame({'val': [1, 2, 3]})
+        with pytest.raises(TypeError, match="text column"):
+            standardize_case(df, 'val', 'upper')
+
+    def test_round_numeric_on_string(self):
+        df = pd.DataFrame({'name': ['Alice', 'Bob']})
+        with pytest.raises(TypeError, match="non-numeric"):
+            round_numeric(df, 'name', 2)
+
+    def test_clip_numeric_on_string(self):
+        df = pd.DataFrame({'name': ['Alice', 'Bob']})
+        with pytest.raises(TypeError, match="non-numeric"):
+            clip_numeric(df, 'name', lower=0)
+
+    def test_remove_outliers_on_string(self):
+        df = pd.DataFrame({'name': ['Alice', 'Bob', 'Charlie']})
+        with pytest.raises(TypeError, match="non-numeric"):
+            remove_outliers(df, 'name')
+
+
+class TestDomainValidation:
+    """Tests for mathematical domain errors."""
+
+    def test_sqrt_on_negative_values(self):
+        df = pd.DataFrame({'val': [4, -1, 9]})
+        with pytest.raises(ValueError, match="negative"):
+            apply_math(df, 'val', 'sqrt')
+
+    def test_log_on_zero_values(self):
+        df = pd.DataFrame({'val': [1, 0, 5]})
+        with pytest.raises(ValueError, match="zero or negative"):
+            apply_math(df, 'val', 'log')
+
+    def test_log_on_negative_values(self):
+        df = pd.DataFrame({'val': [1, -2, 5]})
+        with pytest.raises(ValueError, match="zero or negative"):
+            apply_math(df, 'val', 'log')
+
+    def test_bin_labels_count_mismatch(self):
+        df = pd.DataFrame({'val': [1, 25, 50, 75, 99]})
+        with pytest.raises(ValueError, match="labels"):
+            bin_numeric(df, 'val', bins=4, labels=['a', 'b'])
+
+    def test_invalid_regex_pattern(self):
+        df = pd.DataFrame({'text': ['abc', 'def']})
+        with pytest.raises(ValueError, match="regex"):
+            replace_text_regex(df, 'text', '[invalid', 'x')
+
+    def test_invalid_reference_date(self):
+        df = pd.DataFrame({'date': pd.to_datetime(['2023-01-01', '2023-01-10'])})
+        with pytest.raises(ValueError, match="Invalid reference date"):
+            date_difference(df, 'date', 'not-a-date', 'days')
+
+
+class TestEmptyDataFrame:
+    """Tests that operations on empty DataFrames return empty copies."""
+
+    def test_fill_nulls_empty_df(self):
+        df = pd.DataFrame({'val': pd.Series([], dtype='float64')})
+        result = fill_nulls(df, 'val', 'mean')
+        assert result.empty
+        assert result is not df
+
+    def test_trim_spaces_empty_df(self):
+        df = pd.DataFrame({'text': pd.Series([], dtype='object')})
+        result = trim_spaces(df, 'text')
+        assert result.empty
+
+    def test_round_numeric_empty_df(self):
+        df = pd.DataFrame({'val': pd.Series([], dtype='float64')})
+        result = round_numeric(df, 'val', 2)
+        assert result.empty
+
+    def test_remove_outliers_empty_df(self):
+        df = pd.DataFrame({'val': pd.Series([], dtype='float64')})
+        result = remove_outliers(df, 'val')
+        assert result.empty
+
+
+class TestModeOnAllNaN:
+    """Tests that mode on all-NaN column raises descriptive error."""
+
+    def test_fill_nulls_mode_all_nan(self):
+        df = pd.DataFrame({'val': [None, None, None]})
+        with pytest.raises(ValueError, match="mode"):
+            fill_nulls(df, 'val', 'mode')
+
+
+class TestReorderColumnsValidation:
+    """Tests for reorder_columns validation."""
+
+    def test_reorder_with_missing_columns(self):
+        df = pd.DataFrame({'a': [1], 'b': [2], 'c': [3]})
+        with pytest.raises(ValueError, match="not found"):
+            reorder_columns(df, ['a', 'x', 'y'])
+
+
+class TestFormulaSanitization:
+    """Tests that dangerous formulas are rejected in create_calculated_column."""
+
+    def test_rejects_import_keyword(self):
+        df = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
+        with pytest.raises(ValueError, match="disallowed characters|forbidden keywords"):
+            create_calculated_column(df, 'c', "__import__('os').system('ls')")
+
+    def test_rejects_dunder_access(self):
+        df = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
+        with pytest.raises(ValueError, match="forbidden keywords"):
+            create_calculated_column(df, 'c', "a.__class__.__bases__")
+
+    def test_rejects_special_characters(self):
+        df = pd.DataFrame({'a': [1, 2]})
+        with pytest.raises(ValueError, match="disallowed characters"):
+            create_calculated_column(df, 'c', "a; print('hacked')")
+
+    def test_allows_valid_arithmetic(self):
+        df = pd.DataFrame({'a': [1, 2, 3], 'b': [10, 20, 30]})
+        result = create_calculated_column(df, 'c', 'a + b')
+        assert result['c'].iloc[0] == 11

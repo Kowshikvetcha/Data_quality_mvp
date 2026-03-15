@@ -23,7 +23,7 @@ def generate_suggestions(df: pd.DataFrame, report: dict, column_types: dict) -> 
     row_count = len(df)
     
     # 1. Check for duplicate rows
-    duplicates = report["dataset_level"].get("duplicate_rows", 0)
+    duplicates = report.get("dataset_level", {}).get("duplicate_rows", 0)
     if duplicates > 0:
         suggestions.append({
             "tool_name": "deduplicate_rows",
@@ -35,11 +35,13 @@ def generate_suggestions(df: pd.DataFrame, report: dict, column_types: dict) -> 
         })
     
     # 2. Check for missing values
-    for col, info in report["completeness"].items():
+    for col, info in report.get("completeness", {}).items():
         missing_count = info.get("missing_count", 0)
         missing_pct = info.get("missing_pct", 0)
-        
-        if missing_count > 0:
+        fully_empty = info.get("fully_empty", False)
+
+        # Skip 100% null columns -- fill operations like mode/mean/median would fail
+        if missing_count > 0 and not fully_empty:
             col_type = column_types.get(col, "string")
             
             # Choose appropriate fill method based on column type

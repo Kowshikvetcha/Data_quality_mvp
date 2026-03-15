@@ -28,7 +28,7 @@ def column_completeness_checks(df: pd.DataFrame) -> dict:
 
     for col in df.columns:
         missing_count = int(df[col].isna().sum())
-        missing_pct = round(missing_count / len(df) * 100, 2)
+        missing_pct = round(missing_count / len(df) * 100, 2) if len(df) > 0 else 0.0
 
         issues[col] = {
             "missing_count": missing_count,
@@ -45,8 +45,12 @@ def column_completeness_checks(df: pd.DataFrame) -> dict:
 def infer_column_type(series: pd.Series) -> str:
     non_null = series.dropna()
 
-    # Too little data → default to string
+    # Small dataset -- still try numeric inference before defaulting to string
     if len(non_null) < 5:
+        if len(non_null) > 0:
+            numeric_ratio = pd.to_numeric(non_null, errors="coerce").notna().mean()
+            if numeric_ratio >= 0.8:
+                return "numeric"
         return "string"
 
     # Numeric inference (strict)
@@ -83,7 +87,7 @@ def type_parsing_checks(df: pd.DataFrame, column_types: dict) -> dict:
     issues = {}
 
     for col in df.columns:
-        inferred_type = column_types[col]
+        inferred_type = column_types.get(col, "string")
         series = df[col]
         non_null = series.dropna()
 
