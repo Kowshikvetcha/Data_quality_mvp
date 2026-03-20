@@ -21,7 +21,7 @@ from core.checks import (
     column_completeness_checks,
     type_parsing_checks,
     string_quality_checks,
-    numeric_validity_checks,stre
+    numeric_validity_checks,
     outlier_checks,
 )
 from core.summary import build_column_summary, compute_dataset_health
@@ -80,6 +80,21 @@ if st.session_state.suggestions is None:
 if st.session_state.extra_datasets is None:
     st.session_state.extra_datasets = {}
 
+# ML Pipeline session state
+for ml_key in [
+    "ml_pipeline_started", "ml_task_type", "ml_target_column",
+    "ml_feature_columns", "ml_engineered_df", "ml_preprocessing_pipeline",
+    "ml_split_data", "ml_automl_results", "ml_best_model",
+    "ml_best_model_name", "ml_predictions_df", "ml_feature_importance",
+    "ml_evaluation_metrics", "ml_fe_history",
+]:
+    if ml_key not in st.session_state:
+        st.session_state[ml_key] = None
+if st.session_state.ml_pipeline_started is None:
+    st.session_state.ml_pipeline_started = False
+if st.session_state.ml_fe_history is None:
+    st.session_state.ml_fe_history = []
+
 
 # ------------------------
 # Helper: Run quality checks
@@ -134,15 +149,24 @@ with st.sidebar:
     # Navigation
     current_page = "🕵️ Data Inspector"
     if st.session_state.original_df is not None:
-        current_page = st.radio("Navigate", [
-            "🕵️ Data Inspector", 
-            "💬 Chat & Transform", 
+        nav_pages = [
+            "🕵️ Data Inspector",
+            "💬 Chat & Transform",
             "🛠️ Manual Transform",
             "🔗 Join Datasets",
             "🔮 AI Suggestions",
             "📤 Export",
-            "📜 History & Code"
-        ])
+            "📜 History & Code",
+            "--- ML Pipeline ---",
+            "⚙️ Feature Engineering",
+        ]
+        if st.session_state.ml_pipeline_started:
+            nav_pages.extend([
+                "🤖 Model Training",
+                "📊 Evaluation",
+                "🔮 Predictions",
+            ])
+        current_page = st.radio("Navigate", nav_pages)
         st.divider()
     
     uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx", "parquet"])
@@ -1102,3 +1126,26 @@ if current_page == "📜 History & Code":
         )
     else:
         st.write("No actions performed yet.")
+
+# =====================================================================
+# ML Pipeline Pages
+# =====================================================================
+if current_page == "--- ML Pipeline ---":
+    st.header("ML Pipeline")
+    st.write("Navigate to **Feature Engineering** to start building your ML pipeline.")
+
+if current_page == "⚙️ Feature Engineering":
+    from ml.pages.feature_engineering_page import render as render_fe
+    render_fe()
+
+if current_page == "🤖 Model Training":
+    from ml.pages.training_page import render as render_training
+    render_training()
+
+if current_page == "📊 Evaluation":
+    from ml.pages.evaluation_page import render as render_eval
+    render_eval()
+
+if current_page == "🔮 Predictions" and st.session_state.ml_pipeline_started:
+    from ml.pages.predictions_page import render as render_pred
+    render_pred()

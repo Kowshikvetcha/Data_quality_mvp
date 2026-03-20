@@ -48,3 +48,7 @@ urllib3==2.6.2
 watchdog==6.0.0
 openpyxl==3.1.2
 pytest>=7.0.0
+scikit-learn==1.8.0
+matplotlib==3.10.8
+seaborn==0.13.2
+joblib==1.5.3

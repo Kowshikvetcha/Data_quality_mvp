@@ -1,6 +1,6 @@
 # AI Data Cleaning Pro
 
-A production-ready, AI-assisted data cleaning tool built with Streamlit and OpenAI. Upload datasets, identify quality issues, and clean data through a conversational chat interface — all changes require explicit user confirmation before being applied.
+A production-ready, AI-assisted data cleaning and ML pipeline tool built with Streamlit and OpenAI. Upload datasets, identify quality issues, clean data through a conversational chat interface, then build and evaluate ML models — all in one app.
 
 ---
 
@@ -15,6 +15,13 @@ A production-ready, AI-assisted data cleaning tool built with Streamlit and Open
 - **Export** — Download cleaned data as CSV, Excel, or JSON
 - **Manual Transformations** — Point-and-click cleaning alongside the AI chat
 - **Formula Sanitization** — Calculated column formulas are validated to prevent code injection
+
+### ML Pipeline
+
+- **Feature Engineering** — Label/one-hot encoding, standard/minmax scaling, polynomial features, interaction terms, binning, PCA dimensionality reduction, importance-based feature selection
+- **AutoML** — Automatically trains and ranks multiple algorithms for classification (Logistic Regression, Random Forest, Gradient Boosting, SVM, KNN, Decision Tree), regression (Linear, Ridge, Lasso, Random Forest, Gradient Boosting, SVR, KNN), and clustering (K-Means, Agglomerative, Gaussian Mixture)
+- **Model Evaluation** — Accuracy, precision, recall, F1, ROC AUC, R-squared, MAE, RMSE, silhouette score; confusion matrix, ROC curves, residual plots, cluster scatter plots, feature importance charts
+- **Predictions** — Predict on test set or upload new data; download trained model (.joblib), pipeline config (.json), and full report
 
 ---
 
@@ -91,6 +98,10 @@ All settings live in `config.py` and can be overridden via environment variables
 | `OUTPUT_DIR` | `outputs` | Directory for exported files |
 | `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `LOG_FILE` | `app.log` | Log file path (rotating, 5 MB, 3 backups) |
+| `ML_DEFAULT_TEST_SIZE` | `0.2` | Default train/test split ratio |
+| `ML_DEFAULT_CV_FOLDS` | `5` | Cross-validation folds for AutoML |
+| `ML_MAX_ONEHOT_CATEGORIES` | `20` | Max unique values for one-hot encoding |
+| `ML_DEFAULT_RANDOM_STATE` | `42` | Random seed for reproducibility |
 
 ---
 
@@ -105,7 +116,7 @@ Data_quality_mvp/
 ├── .env.example             # Environment variable template
 ├── .streamlit/
 │   └── config.toml          # Streamlit server & theme settings
-├── core/
+├── core/                    # Data cleaning logic
 │   ├── ai_router.py         # OpenAI integration with retry logic
 │   ├── ai_tools.py          # Tool definitions for function calling
 │   ├── checks.py            # Data quality checks
@@ -118,7 +129,19 @@ Data_quality_mvp/
 │   ├── suggestions.py       # AI-generated cleaning suggestions
 │   ├── summary.py           # Dataset health scoring
 │   └── validators.py        # Input validation utilities
-├── tests/                   # 247 pytest tests
+├── ml/                      # ML pipeline
+│   ├── config.py            # ML-specific configuration
+│   ├── validators.py        # ML input validation & leakage detection
+│   ├── feature_engineering.py # Encoding, scaling, PCA, polynomial features, etc.
+│   ├── training.py          # AutoML engine with algorithm registries
+│   ├── evaluation.py        # Metrics, feature importance, visualization data
+│   ├── predictions.py       # Predict on new data, model export
+│   └── pages/               # Streamlit page renderers
+│       ├── feature_engineering_page.py
+│       ├── training_page.py
+│       ├── evaluation_page.py
+│       └── predictions_page.py
+├── tests/                   # 382 pytest tests
 │   ├── test_checks.py
 │   ├── test_cleaning.py
 │   ├── test_cleaning_executor.py
@@ -127,7 +150,12 @@ Data_quality_mvp/
 │   ├── test_export.py
 │   ├── test_join.py
 │   ├── test_suggestions.py
-│   └── test_summary.py
+│   ├── test_summary.py
+│   ├── test_ml_validators.py
+│   ├── test_ml_feature_engineering.py
+│   ├── test_ml_training.py
+│   ├── test_ml_evaluation.py
+│   └── test_ml_predictions.py
 ├── sample_data/             # Example CSV files for testing
 └── archive/                 # Legacy app versions and scripts
 ```

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Data Cleaning Pro — a Streamlit-based data cleaning tool that uses OpenAI's function-calling API to let users describe transformations in natural language. The AI translates requests into tool calls, which are validated and executed against pandas DataFrames.
+AI Data Cleaning Pro — a Streamlit-based data cleaning and ML pipeline tool. The cleaning side uses OpenAI's function-calling API for natural-language transformations. The ML side provides an end-to-end AutoML pipeline: feature engineering, model training (classification, regression, clustering), evaluation, and predictions.
 
 ## Commands
 
@@ -12,7 +12,7 @@ AI Data Cleaning Pro — a Streamlit-based data cleaning tool that uses OpenAI's
 # Run the app
 streamlit run app_enhanced.py
 
-# Run all tests (247 tests across 11 modules)
+# Run all tests (382 tests across 16 modules)
 pytest tests/ -v
 
 # Run a single test file
@@ -59,9 +59,26 @@ User (Streamlit UI in app_enhanced.py)
 | `validators.py` | Input validation utilities |
 | `logger.py` | Rotating file logger (5 MB, 3 backups) via `get_logger(name)` |
 
+### ML pipeline modules (`ml/`)
+
+| Module | Role |
+|---|---|
+| `validators.py` | ML-specific validation (target column, feature columns, leakage detection) |
+| `feature_engineering.py` | Encoding, scaling, polynomial features, interaction terms, binning, PCA, feature selection, train/test split |
+| `training.py` | AutoML engine — algorithm registries for classification/regression/clustering, trains all, ranks by primary metric |
+| `evaluation.py` | Metrics computation, feature importance, confusion matrix/ROC/residual/cluster visualization data |
+| `predictions.py` | Predict on new data, model serialization (joblib), pipeline config export |
+| `config.py` | ML-specific configuration (test size, CV folds, random state, etc.) |
+| `pages/` | Streamlit page renderers: feature_engineering_page, training_page, evaluation_page, predictions_page |
+
+**ML flow:** cleaned_df → Feature Engineering (encode, scale, PCA, etc.) → train/test split → AutoML (try all algorithms) → Evaluation (metrics + visualizations) → Predictions (test set or new data upload) → Export (model, predictions, report).
+
 ### UI pages in `app_enhanced.py`
 
-Data Inspector, Chat & Transform, Manual Transform, Join Datasets, AI Suggestions, Export, History & Code. Session state tracks `cleaned_df`, `df_history` (undo stack, max 20), `pending_tool_calls`, `executed_actions`, and `chat_history`.
+**Cleaning:** Data Inspector, Chat & Transform, Manual Transform, Join Datasets, AI Suggestions, Export, History & Code.
+**ML Pipeline:** Feature Engineering, Model Training, Evaluation, Predictions.
+
+Session state tracks `cleaned_df`, `df_history` (undo stack, max 20), `pending_tool_calls`, `executed_actions`, `chat_history`, plus ML state: `ml_engineered_df`, `ml_split_data`, `ml_automl_results`, `ml_best_model`, `ml_preprocessing_pipeline`.
 
 ## Configuration
 
@@ -73,4 +90,4 @@ Tests are in `tests/` with shared fixtures in `conftest.py`. Fixtures provide Da
 
 ## Dependencies
 
-Core: `streamlit`, `pandas`, `openai`, `tenacity`, `pydantic`, `altair`, `openpyxl`, `pyarrow`. All pinned in `requirements.txt`.
+Core: `streamlit`, `pandas`, `openai`, `tenacity`, `pydantic`, `altair`, `openpyxl`, `pyarrow`. ML: `scikit-learn`, `matplotlib`, `seaborn`, `joblib`. All pinned in `requirements.txt`.
