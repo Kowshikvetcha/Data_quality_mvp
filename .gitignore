@@ -1,8 +1,33 @@
+# Environment & secrets
 .env
+
+# Virtual environments
 .venv/
+.venv_test/
+venv/
+env/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# App outputs & logs
 outputs/
 *.log
+
+# Misc
 archive/
 .claude/
