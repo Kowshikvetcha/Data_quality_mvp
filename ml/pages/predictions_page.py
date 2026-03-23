@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 
+from styles import styled_page_header, styled_section_header
 from ml.predictions import (
     predict_on_dataframe,
     predict_probabilities,
@@ -16,7 +17,7 @@ from ml.evaluation import generate_evaluation_report
 
 def render():
     """Render the Predictions page."""
-    st.header("Predictions")
+    styled_page_header("Predictions", "Generate predictions on test or new data")
 
     model = st.session_state.get("ml_best_model")
     if model is None:
@@ -161,7 +162,7 @@ def _render_new_data_predictions(task_type, model, features, pipeline):
 
 def _render_export(model, task_type, features, target, pipeline):
     """Render model and pipeline export section."""
-    st.subheader("Download Model & Config")
+    styled_section_header("Download Model & Config")
 
     c1, c2 = st.columns(2)
 

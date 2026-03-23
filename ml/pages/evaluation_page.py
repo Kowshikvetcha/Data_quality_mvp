@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import altair as alt
 
+from styles import styled_page_header
 from ml.evaluation import (
     compute_classification_metrics,
     compute_regression_metrics,
@@ -20,7 +21,7 @@ from ml.evaluation import (
 
 def render():
     """Render the Evaluation page."""
-    st.header("Model Evaluation")
+    styled_page_header("Model Evaluation", "Analyze model performance and compare results")
 
     model = st.session_state.get("ml_best_model")
     results = st.session_state.get("ml_automl_results")

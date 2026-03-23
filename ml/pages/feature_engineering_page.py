@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 
+from styles import styled_page_header, styled_section_header
 from ml.feature_engineering import (
     label_encode_column,
     one_hot_encode_column,
@@ -37,7 +38,7 @@ def _current_setup_signature():
 
 def render():
     """Render the Feature Engineering page."""
-    st.header("Feature Engineering")
+    styled_page_header("Feature Engineering", "Prepare features for model training")
 
     cleaned = st.session_state.get("cleaned_df")
     if cleaned is None:
@@ -388,7 +389,7 @@ def render():
             f"Data already split: **{len(split['X_train'])} train**"
             + (f", **{len(split['X_test'])} test**" if split['X_test'] is not None else "")
             + f" | **{len(split['feature_names'])} features**"
-            + " — Navigate to **Model Training** in the sidebar."
+            + " — Switch to **Model Training** using the navigation above."
         )
 
     if st.button("Split Data & Proceed to Training", type="primary", key="btn_split"):

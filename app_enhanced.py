@@ -33,6 +33,7 @@ from core.diff_preview import preview_transformation, count_changes
 from core.export import get_export_bytes_csv, get_export_bytes_excel, get_export_bytes_json
 from config import DATAFRAME_PREVIEW_ROWS, MAX_UNDO_HISTORY, APP_TITLE, APP_VERSION
 from core.logger import setup_logging, get_logger
+from styles import inject_custom_css, styled_page_header, styled_section_header
 
 setup_logging()
 logger = get_logger("app")
@@ -41,10 +42,12 @@ logger = get_logger("app")
 # Page config
 # ------------------------
 st.set_page_config(
-    page_title="AI Data Cleaning Pro", 
+    page_title="AI Data Cleaning Pro",
     layout="wide",
     page_icon="🧹"
 )
+
+inject_custom_css()
 
 # ------------------------
 # Session state init
@@ -143,30 +146,46 @@ def _push_history(df):
 # SIDEBAR: File Upload & Status
 # ------------------------
 with st.sidebar:
-    st.title("🧹 AI Cleaner Pro")
-    st.caption("Enhanced Edition +")
-    
-    # Navigation
-    current_page = "🕵️ Data Inspector"
+    st.title("AI Data Cleaning Pro")
+    st.caption(f"v{APP_VERSION}")
+
+    # Navigation — two-level: section selectbox + page radio
+    current_page = "Data Inspector"
     if st.session_state.original_df is not None:
-        nav_pages = [
-            "🕵️ Data Inspector",
-            "💬 Chat & Transform",
-            "🛠️ Manual Transform",
-            "🔗 Join Datasets",
-            "🔮 AI Suggestions",
-            "📤 Export",
-            "📜 History & Code",
-            "--- ML Pipeline ---",
-            "⚙️ Feature Engineering",
-        ]
-        if st.session_state.ml_pipeline_started:
-            nav_pages.extend([
-                "🤖 Model Training",
-                "📊 Evaluation",
-                "🔮 Predictions",
-            ])
-        current_page = st.radio("Navigate", nav_pages)
+        section = st.selectbox(
+            "Section",
+            ["Data Cleaning", "ML Pipeline"],
+            key="nav_section",
+            label_visibility="collapsed",
+        )
+
+        if section == "Data Cleaning":
+            cleaning_pages = [
+                "Data Inspector",
+                "Chat & Transform",
+                "Manual Transform",
+                "Join Datasets",
+                "AI Suggestions",
+                "Export",
+                "History & Code",
+            ]
+            current_page = st.radio(
+                "Page",
+                cleaning_pages,
+                key="nav_cleaning_page",
+                label_visibility="collapsed",
+            )
+        else:
+            ml_pages = ["Feature Engineering"]
+            if st.session_state.ml_pipeline_started:
+                ml_pages.extend(["Model Training", "Evaluation", "Predictions"])
+            current_page = st.radio(
+                "Page",
+                ml_pages,
+                key="nav_ml_page",
+                label_visibility="collapsed",
+            )
+
         st.divider()
     
     uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx", "parquet"])
@@ -254,7 +273,6 @@ with st.sidebar:
 # Sidebar: System Status
 with st.sidebar:
     st.divider()
-    st.caption(f"v{APP_VERSION}")
     from config import OPENAI_API_KEY as _key, OPENAI_MODEL as _model
     if _key:
         st.success(f"AI: {_model}", icon="🟢")
@@ -263,9 +281,17 @@ with st.sidebar:
     if st.session_state.df_history:
         st.caption(f"Undo stack: {len(st.session_state.df_history)}/{MAX_UNDO_HISTORY}")
 
-# Stop if no data
+# Stop if no data — show welcome screen
 if st.session_state.original_df is None:
-    st.info("👈 Upload a dataset (CSV, Excel, Parquet) to start.")
+    st.markdown(
+        """
+        <div style="text-align:center;padding:4rem 1rem;">
+            <h1 style="font-size:2.5rem;margin-bottom:0.5rem;">Welcome to AI Data Cleaning Pro</h1>
+            <p style="font-size:1.1rem;color:#6B7280;">Upload a dataset (CSV, Excel, or Parquet) using the sidebar to get started.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 
@@ -273,15 +299,15 @@ if st.session_state.original_df is None:
 # COLUMN TYPE OVERRIDE
 # ------------------------
 if st.session_state.original_df is not None and show_type_override:
-    st.subheader("🛠️ Override Column Types")
+    styled_section_header("Override Column Types")
     st.info("Review the current inferred types below. If any are incorrect, select the column and its correct type to override.")
-    
+
     # Display current types summary
     type_data = [{"Column": k, "Current Type": v} for k, v in st.session_state.column_types.items()]
     type_df = pd.DataFrame(type_data)
     st.dataframe(type_df, use_container_width=True, hide_index=True)
-    
-    with st.container():
+
+    with st.container(border=True):
         c1, c2, c3 = st.columns([2, 2, 1])
         
         with c1:
@@ -379,11 +405,11 @@ def apply_manual_tool(tool_name, arguments):
 # ======================== 
 # PAGE 1: INSPECTOR
 # ======================== 
-if current_page == "🕵️ Data Inspector":
+if current_page == "Data Inspector":
     # Header Area with Undo Button
     h_col1, h_col2 = st.columns([3, 1])
     with h_col1:
-        st.header("🔎 Data Inspector")
+        styled_page_header("Data Inspector", "Compare original and cleaned data")
     with h_col2:
         if st.session_state.df_history:
             if st.button("↩️ Undo Last Change", key="undo_inspector", help="Revert the last transformation"):
@@ -526,9 +552,9 @@ if current_page == "🕵️ Data Inspector":
 # ======================== 
 # PAGE 2: CHAT & TRANSFORM
 # ======================== 
-if current_page == "💬 Chat & Transform":
-    st.header("💬 Chat & Transform")
-    st.markdown("**Interact with AI to clean your data naturally!** Describe your needs, and let the system suggest and apply transformations.")
+if current_page == "Chat & Transform":
+    styled_page_header("Chat & Transform", "Interact with AI to clean your data naturally")
+    st.markdown("Describe your needs, and let the system suggest and apply transformations.")
 
     # Chat Interface Section
     with st.container(border=True):
@@ -645,9 +671,8 @@ if current_page == "💬 Chat & Transform":
 # ======================== 
 # PAGE 3: MANUAL TRANSFORM
 # ======================== 
-if current_page == "🛠️ Manual Transform":
-    st.header("🛠️ Manual Transformation")
-    st.info("Select a column and an operation to apply directly.")
+if current_page == "Manual Transform":
+    styled_page_header("Manual Transform", "Select a column and operation to apply directly")
     
     cols = st.session_state.cleaned_df.columns.tolist()
 
@@ -877,9 +902,8 @@ if current_page == "🛠️ Manual Transform":
 # ======================== 
 # PAGE 4: JOIN DATASETS
 # ======================== 
-if current_page == "🔗 Join Datasets":
-    st.header("🔗 Join Datasets")
-    st.markdown("Combine your current dataset with another uploaded file.")
+if current_page == "Join Datasets":
+    styled_page_header("Join Datasets", "Combine your current dataset with another uploaded file")
     
     if not st.session_state.extra_datasets:
         st.warning("⚠️ No additional datasets found. Please upload extra files in the sidebar first.")
@@ -968,8 +992,8 @@ if current_page == "🔗 Join Datasets":
 # ========================
 # PAGE 5: AI SUGGESTIONS
 # ======================== 
-if current_page == "🔮 AI Suggestions":
-    st.header("🔮 AI Suggestions")
+if current_page == "AI Suggestions":
+    styled_page_header("AI Suggestions", "Proactive recommendations for your dataset")
     
     if st.button("🔄 Refresh Suggestions"):
         refresh_suggestions()
@@ -1043,49 +1067,50 @@ if current_page == "🔮 AI Suggestions":
 # ======================== 
 # PAGE 5: EXPORT
 # ======================== 
-if current_page == "📤 Export":
-    st.header("📤 Export Data")
-    
+if current_page == "Export":
+    styled_page_header("Export", "Download your cleaned data in various formats")
+
     if not st.session_state.has_cleaning_applied:
         st.info("No transformations applied yet.")
     else:
-        st.subheader("Download")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            try:
-                st.download_button(
-                    "📥 CSV",
-                    data=get_export_bytes_csv(st.session_state.cleaned_df),
-                    file_name="cleaned_data.csv",
-                    mime="text/csv",
-                    type="primary"
-                )
-            except Exception as e:
-                st.warning(f"CSV export error: {e}")
-        
-        with col2:
-            try:
-                st.download_button(
-                    "📥 Excel",
-                    data=get_export_bytes_excel(st.session_state.cleaned_df),
-                    file_name="cleaned_data.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            except Exception as e:
-                st.warning("Excel export error.")
-        
-        with col3:
-            try:
-                st.download_button(
-                    "📥 JSON",
-                    data=get_export_bytes_json(st.session_state.cleaned_df),
-                    file_name="cleaned_data.json",
-                    mime="application/json"
-                )
-            except Exception as e:
-                st.warning(f"JSON export error: {e}")
+        styled_section_header("Download")
+
+        with st.container(border=True):
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                try:
+                    st.download_button(
+                        "CSV",
+                        data=get_export_bytes_csv(st.session_state.cleaned_df),
+                        file_name="cleaned_data.csv",
+                        mime="text/csv",
+                        type="primary"
+                    )
+                except Exception as e:
+                    st.warning(f"CSV export error: {e}")
+
+            with col2:
+                try:
+                    st.download_button(
+                        "Excel",
+                        data=get_export_bytes_excel(st.session_state.cleaned_df),
+                        file_name="cleaned_data.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                except Exception as e:
+                    st.warning("Excel export error.")
+
+            with col3:
+                try:
+                    st.download_button(
+                        "JSON",
+                        data=get_export_bytes_json(st.session_state.cleaned_df),
+                        file_name="cleaned_data.json",
+                        mime="application/json"
+                    )
+                except Exception as e:
+                    st.warning(f"JSON export error: {e}")
         
         st.divider()
         st.subheader("Transformation Summary")
@@ -1099,8 +1124,8 @@ if current_page == "📤 Export":
 # ======================== 
 # PAGE 6: HISTORY & CODE
 # ======================== 
-if current_page == "📜 History & Code":
-    st.header("📜 Audit Log & Code")
+if current_page == "History & Code":
+    styled_page_header("History & Code", "Audit log and generated cleaning script")
     
     if st.session_state.executed_actions:
         st.write("### 📝 Cleaning Script")
@@ -1130,22 +1155,18 @@ if current_page == "📜 History & Code":
 # =====================================================================
 # ML Pipeline Pages
 # =====================================================================
-if current_page == "--- ML Pipeline ---":
-    st.header("ML Pipeline")
-    st.write("Navigate to **Feature Engineering** to start building your ML pipeline.")
-
-if current_page == "⚙️ Feature Engineering":
+if current_page == "Feature Engineering":
     from ml.pages.feature_engineering_page import render as render_fe
     render_fe()
 
-if current_page == "🤖 Model Training":
+if current_page == "Model Training":
     from ml.pages.training_page import render as render_training
     render_training()
 
-if current_page == "📊 Evaluation":
+if current_page == "Evaluation":
     from ml.pages.evaluation_page import render as render_eval
     render_eval()
 
-if current_page == "🔮 Predictions" and st.session_state.ml_pipeline_started:
+if current_page == "Predictions" and st.session_state.ml_pipeline_started:
     from ml.pages.predictions_page import render as render_pred
     render_pred()

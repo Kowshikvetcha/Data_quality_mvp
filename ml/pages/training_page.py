@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 
+from styles import styled_page_header, styled_section_header
 from ml.training import (
     get_algorithms_for_task,
     get_primary_metric,
@@ -14,7 +15,7 @@ from ml.config import ML_DEFAULT_CV_FOLDS
 
 def render():
     """Render the Model Training page."""
-    st.header("Model Training")
+    styled_page_header("Model Training", "Train and compare ML models")
 
     split = st.session_state.get("ml_split_data")
     if split is None:
@@ -27,7 +28,7 @@ def render():
     n_train_rows = len(split["X_train"])
 
     # -- Task Info --
-    st.subheader("Dataset Summary")
+    styled_section_header("Dataset Summary")
     c1, c2, c3 = st.columns(3)
     c1.metric("Task Type", task_type.title())
     c2.metric("Features", len(features))
@@ -39,7 +40,7 @@ def render():
     st.divider()
 
     # -- Algorithm Selection --
-    st.subheader("Algorithm Selection")
+    styled_section_header("Algorithm Selection")
 
     if task_type == "clustering":
         algo_registry = CLUSTERING_ALGORITHMS
