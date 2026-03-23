@@ -176,7 +176,7 @@ with st.sidebar:
                 label_visibility="collapsed",
             )
         else:
-            ml_pages = ["Feature Engineering"]
+            ml_pages = ["Auto ML", "Feature Engineering"]
             if st.session_state.ml_pipeline_started:
                 ml_pages.extend(["Model Training", "Evaluation", "Predictions"])
             current_page = st.radio(
@@ -1155,6 +1155,10 @@ if current_page == "History & Code":
 # =====================================================================
 # ML Pipeline Pages
 # =====================================================================
+if current_page == "Auto ML":
+    from ml.pages.auto_ml_page import render as render_auto_ml
+    render_auto_ml()
+
 if current_page == "Feature Engineering":
     from ml.pages.feature_engineering_page import render as render_fe
     render_fe()
