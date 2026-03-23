@@ -7,8 +7,6 @@ from ml.training import (
     get_primary_metric,
     run_automl,
     run_clustering,
-    CLASSIFICATION_ALGORITHMS,
-    REGRESSION_ALGORITHMS,
     CLUSTERING_ALGORITHMS,
 )
 from ml.config import ML_DEFAULT_CV_FOLDS
@@ -26,6 +24,7 @@ def render():
     task_type = st.session_state.ml_task_type
     target = st.session_state.ml_target_column
     features = split["feature_names"]
+    n_train_rows = len(split["X_train"])
 
     # -- Task Info --
     st.subheader("Dataset Summary")
@@ -33,9 +32,9 @@ def render():
     c1.metric("Task Type", task_type.title())
     c2.metric("Features", len(features))
     if task_type != "clustering":
-        c3.metric("Train / Test", f"{len(split['X_train'])} / {len(split['X_test'])}")
+        c3.metric("Train / Test", f"{n_train_rows} / {len(split['X_test'])}")
     else:
-        c3.metric("Samples", len(split["X_train"]))
+        c3.metric("Samples", n_train_rows)
 
     st.divider()
 
@@ -48,10 +47,8 @@ def render():
         n_max = st.number_input("Max clusters", 2, 20, 10, key="cl_max")
         n_clusters_range = list(range(int(n_min), int(n_max) + 1))
     else:
-        algo_registry = (
-            CLASSIFICATION_ALGORITHMS if task_type == "classification"
-            else REGRESSION_ALGORITHMS
-        )
+        # Build registry sized for the dataset (constrains SVM on large data)
+        algo_registry = get_algorithms_for_task(task_type, n_rows=n_train_rows)
 
     algo_names = list(algo_registry.keys())
     selected_algos = st.multiselect(
@@ -69,19 +66,44 @@ def render():
 
     # -- Run AutoML --
     st.divider()
+
+    # Show previous results banner if they exist
+    if st.session_state.get("ml_automl_results") is not None:
+        best_name = st.session_state.get("ml_best_model_name", "N/A")
+        st.info(
+            f"Models already trained. Best: **{best_name}** "
+            "— scroll down to the leaderboard, or re-run to retrain."
+        )
+
     if st.button("Run AutoML", type="primary", key="btn_automl"):
         if not selected_algos:
             st.error("Select at least one algorithm.")
             return
 
-        subset = {k: algo_registry[k] for k in selected_algos}
+        subset = {k: algo_registry[k] for k in selected_algos if k in algo_registry}
 
-        with st.spinner("Training models..."):
+        progress_bar = st.progress(0, text="Preparing models...")
+        status_container = st.empty()
+
+        def _progress_callback(step, total, algo_name, status):
+            pct = min(step / max(total, 1), 1.0)
+            if status == "training":
+                progress_bar.progress(pct, text=f"Training {algo_name}... ({step + 1}/{total})")
+                status_container.info(f"Currently training: **{algo_name}**")
+            else:
+                progress_bar.progress(pct, text=f"Completed {algo_name} ({step}/{total})")
+
+        training_success = False
+        training_error = None
+        results = None
+
+        try:
             if task_type == "clustering":
                 results = run_clustering(
                     split["X_train"],
                     algorithms=subset,
                     n_clusters_range=n_clusters_range,
+                    progress_callback=_progress_callback,
                 )
             else:
                 results = run_automl(
@@ -90,13 +112,34 @@ def render():
                     split["X_test"], split["y_test"],
                     algorithms=subset,
                     cv_folds=int(cv_folds),
+                    progress_callback=_progress_callback,
                 )
+            training_success = True
+        except Exception as e:
+            training_error = str(e)
+
+        progress_bar.empty()
+        status_container.empty()
+
+        if not training_success:
+            st.error(f"Training failed: {training_error}")
+            return
+
+        if not results["results"]:
+            st.error("No models trained successfully. Check your data and try again.")
+            return
 
         st.session_state.ml_automl_results = results
         st.session_state.ml_best_model = results["best_model"]
         st.session_state.ml_best_model_name = results["best_model_name"]
         st.session_state.ml_evaluation_metrics = results.get("best_metrics", {})
-        st.success(f"Training complete! Best: {results['best_model_name']}")
+        st.success(
+            f"Training complete! **{len(results['results'])}** models trained. "
+            f"Best: **{results['best_model_name']}**"
+        )
+        st.balloons()
+        # Rerun is OUTSIDE the try/except so Streamlit's RerunException
+        # is not accidentally caught.
         st.rerun()
 
     # -- Leaderboard --

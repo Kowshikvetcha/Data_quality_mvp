@@ -23,6 +23,18 @@ from ml.validators import (
 from ml.config import ML_DEFAULT_TEST_SIZE, ML_MAX_ONEHOT_CATEGORIES
 
 
+def _current_setup_signature():
+    """Build a signature string from the current Step 1 widget values.
+
+    Used to detect when the user changes task type / target / features
+    so the Initialize button can be re-enabled.
+    """
+    task = st.session_state.get("ml_task_type_select", "")
+    target = st.session_state.get("ml_target_select", "")
+    features = tuple(sorted(st.session_state.get("ml_features_select", [])))
+    return f"{task}|{target}|{features}"
+
+
 def render():
     """Render the Feature Engineering page."""
     st.header("Feature Engineering")
@@ -57,7 +69,18 @@ def render():
         key="ml_features_select",
     )
 
-    if st.button("Initialize ML Pipeline", type="primary"):
+    # Determine whether the Initialize button should be disabled:
+    # Disabled when pipeline is already started AND the user hasn't changed
+    # any Step 1 option since the last initialization.
+    pipeline_started = st.session_state.get("ml_pipeline_started", False)
+    current_sig = _current_setup_signature()
+    last_sig = st.session_state.get("_ml_init_signature", "")
+    disable_init = pipeline_started and (current_sig == last_sig)
+
+    if disable_init:
+        st.success("ML pipeline initialized. Change an option above to re-initialize, or proceed to Step 2.")
+
+    if st.button("Initialize ML Pipeline", type="primary", disabled=disable_init):
         try:
             if target_column:
                 validate_target_column(cleaned, target_column, task_type)
@@ -90,7 +113,12 @@ def render():
             "pca_columns": [],
         }
         st.session_state.ml_fe_history = []
-        st.success("ML pipeline initialized!")
+        st.session_state.ml_split_data = None
+        st.session_state.ml_automl_results = None
+        st.session_state.ml_best_model = None
+        # Save the signature so we know the button should be disabled
+        st.session_state["_ml_init_signature"] = current_sig
+        st.success("ML pipeline initialized! Proceed to Step 2 below.")
         st.rerun()
 
     if not st.session_state.get("ml_pipeline_started"):
@@ -120,6 +148,8 @@ def render():
         }
         st.session_state.ml_fe_history = []
         st.session_state.ml_split_data = None
+        st.session_state.ml_automl_results = None
+        st.session_state.ml_best_model = None
         st.success("Reset to cleaned dataset.")
         st.rerun()
 
@@ -140,19 +170,19 @@ def render():
 
             if st.button("Apply Encoding", key="btn_encode"):
                 try:
-                    if enc_method == "label":
-                        eng_df, mapping = label_encode_column(eng_df, enc_col)
-                        pipeline["label_encoders"][enc_col] = mapping
-                    else:
-                        eng_df = one_hot_encode_column(
-                            eng_df, enc_col, drop_first=drop_first,
-                            max_categories=ML_MAX_ONEHOT_CATEGORIES,
-                        )
+                    with st.spinner(f"Applying {enc_method} encoding to '{enc_col}'..."):
+                        if enc_method == "label":
+                            eng_df, mapping = label_encode_column(eng_df, enc_col)
+                            pipeline["label_encoders"][enc_col] = mapping
+                        else:
+                            eng_df = one_hot_encode_column(
+                                eng_df, enc_col, drop_first=drop_first,
+                                max_categories=ML_MAX_ONEHOT_CATEGORIES,
+                            )
                     st.session_state.ml_engineered_df = eng_df
                     st.session_state.ml_fe_history.append(
                         f"{enc_method} encode '{enc_col}'"
                     )
-                    # Update feature columns
                     _refresh_feature_columns()
                     st.success(f"Applied {enc_method} encoding to '{enc_col}'")
                     st.rerun()
@@ -170,7 +200,8 @@ def render():
             )
             if st.button("Apply Scaling", key="btn_scale") and scale_cols:
                 try:
-                    eng_df, scaler = scale_features(eng_df, scale_cols, method=scale_method)
+                    with st.spinner(f"Scaling {len(scale_cols)} columns..."):
+                        eng_df, scaler = scale_features(eng_df, scale_cols, method=scale_method)
                     st.session_state.ml_engineered_df = eng_df
                     pipeline["scaler"] = scaler
                     pipeline["scale_columns"] = scale_cols
@@ -192,10 +223,11 @@ def render():
             poly_interact = st.checkbox("Interaction only", key="poly_interact")
             if st.button("Generate Polynomial Features", key="btn_poly") and poly_cols:
                 try:
-                    eng_df = create_polynomial_features(
-                        eng_df, poly_cols, degree=poly_degree,
-                        interaction_only=poly_interact,
-                    )
+                    with st.spinner("Generating polynomial features..."):
+                        eng_df = create_polynomial_features(
+                            eng_df, poly_cols, degree=poly_degree,
+                            interaction_only=poly_interact,
+                        )
                     st.session_state.ml_engineered_df = eng_df
                     st.session_state.ml_fe_history.append(
                         f"Polynomial features (degree={poly_degree}) on {len(poly_cols)} columns"
@@ -235,7 +267,8 @@ def render():
             )
             if st.button("Apply Binning", key="btn_bin"):
                 try:
-                    eng_df = bin_feature(eng_df, bin_col, n_bins=n_bins, strategy=bin_strategy)
+                    with st.spinner(f"Binning '{bin_col}'..."):
+                        eng_df = bin_feature(eng_df, bin_col, n_bins=n_bins, strategy=bin_strategy)
                     st.session_state.ml_engineered_df = eng_df
                     st.session_state.ml_fe_history.append(
                         f"Bin '{bin_col}' into {n_bins} bins ({bin_strategy})"
@@ -256,7 +289,8 @@ def render():
             n_comp = st.slider("Components", 1, max_comp, min(2, max_comp), key="n_comp")
             if st.button("Apply PCA", key="btn_pca") and pca_cols:
                 try:
-                    eng_df, pca_obj = apply_pca(eng_df, pca_cols, n_components=n_comp)
+                    with st.spinner("Applying PCA..."):
+                        eng_df, pca_obj = apply_pca(eng_df, pca_cols, n_components=n_comp)
                     st.session_state.ml_engineered_df = eng_df
                     pipeline["pca"] = pca_obj
                     pipeline["pca_columns"] = pca_cols
@@ -278,9 +312,10 @@ def render():
                               min(10, len(avail_features)), key="top_k")
             if st.button("Analyze & Select Features", key="btn_feat_sel") and avail_features:
                 try:
-                    top = select_features_by_importance(
-                        eng_df, target, avail_features, task_type, top_k=top_k
-                    )
+                    with st.spinner("Ranking features by importance..."):
+                        top = select_features_by_importance(
+                            eng_df, target, avail_features, task_type, top_k=top_k
+                        )
                     st.write("Top features:", top)
                     # Drop non-selected feature columns
                     drop_cols = [c for c in avail_features if c not in top]
@@ -306,7 +341,8 @@ def render():
             null_cols = [c for c in eng_df.columns if eng_df[c].isnull().any()]
             if st.button("Handle Nulls", key="btn_nulls"):
                 try:
-                    eng_df = handle_remaining_nulls(eng_df, null_cols, strategy=null_strategy)
+                    with st.spinner("Handling nulls..."):
+                        eng_df = handle_remaining_nulls(eng_df, null_cols, strategy=null_strategy)
                     st.session_state.ml_engineered_df = eng_df
                     st.session_state.ml_fe_history.append(
                         f"Handle nulls: {null_strategy} on {len(null_cols)} columns"
@@ -345,17 +381,43 @@ def render():
     # Update feature columns to match current engineered df
     current_features = [c for c in eng_df.columns if c != target]
 
+    # Show previous split result if exists
+    if st.session_state.get("ml_split_data") is not None:
+        split = st.session_state.ml_split_data
+        st.info(
+            f"Data already split: **{len(split['X_train'])} train**"
+            + (f", **{len(split['X_test'])} test**" if split['X_test'] is not None else "")
+            + f" | **{len(split['feature_names'])} features**"
+            + " — Navigate to **Model Training** in the sidebar."
+        )
+
     if st.button("Split Data & Proceed to Training", type="primary", key="btn_split"):
         try:
-            split = prepare_train_test_split(
-                eng_df, target, current_features, test_size=test_size
-            )
+            with st.spinner("Splitting data into train/test sets..."):
+                split = prepare_train_test_split(
+                    eng_df, target, current_features, test_size=test_size
+                )
             st.session_state.ml_split_data = split
             st.session_state.ml_feature_columns = current_features
+            # Clear stale model results from a previous run
+            st.session_state.ml_automl_results = None
+            st.session_state.ml_best_model = None
+            st.session_state.ml_best_model_name = None
+
+            train_count = len(split['X_train'])
+            test_count = len(split['X_test']) if split['X_test'] is not None else 0
+            feat_count = len(current_features)
+            is_clustering = target is None
+
             st.success(
-                f"Data split: {len(split['X_train'])} train"
-                + (f", {len(split['X_test'])} test" if split['X_test'] is not None else "")
+                f"Data split successfully! "
+                + (f"**{train_count}** train samples, **{test_count}** test samples"
+                   if not is_clustering
+                   else f"**{train_count}** samples (no split for clustering)")
+                + f" with **{feat_count}** features."
             )
+            st.balloons()
+            st.info("Navigate to **Model Training** in the sidebar to train your models.")
         except (ValueError, TypeError) as e:
             st.error(str(e))
 

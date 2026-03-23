@@ -203,10 +203,26 @@ def select_features_by_importance(
     X = subset[feature_columns]
     y = subset[target_column]
 
+    n_features = X.shape[1]
+    n_samples = X.shape[0]
+    # Constrain the forest to avoid memory blowups on wide/large datasets
+    max_feats = min(n_features, 200)
+    max_depth = min(8, max(3, int(np.log2(max(n_samples, 2)))))
+    max_samples_frac = min(1.0, 10_000 / max(n_samples, 1))
+
+    rf_params = dict(
+        n_estimators=30,
+        max_depth=max_depth,
+        max_features=min(max_feats, n_features) if n_features > 20 else "sqrt",
+        max_samples=max_samples_frac if n_samples > 10_000 else None,
+        random_state=ML_DEFAULT_RANDOM_STATE,
+        n_jobs=1,
+    )
+
     if task_type == "classification":
-        model = RandomForestClassifier(n_estimators=50, random_state=ML_DEFAULT_RANDOM_STATE)
+        model = RandomForestClassifier(**rf_params)
     else:
-        model = RandomForestRegressor(n_estimators=50, random_state=ML_DEFAULT_RANDOM_STATE)
+        model = RandomForestRegressor(**rf_params)
 
     model.fit(X, y)
     importances = pd.Series(model.feature_importances_, index=feature_columns)
